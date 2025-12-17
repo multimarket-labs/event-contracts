@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import "../interfaces/IFundingManager.sol";
 
 abstract contract FundingManagerStorage is IFundingManager {
-    constructor(){
+    address public fundingPodWhitelister;
 
-    }
+    mapping(IFundingPod => bool) public podIsWhitelistedForDeposit;
 }
