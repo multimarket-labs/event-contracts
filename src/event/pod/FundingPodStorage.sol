@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
-import "../interfaces/IFundingPod.sol";
+import "../../interfaces/event/IFundingPod.sol";
 
 abstract contract FundingPodStorage is IFundingPod {
     address public constant ETHAddress = address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE);
