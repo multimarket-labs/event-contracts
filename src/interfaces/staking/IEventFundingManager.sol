@@ -2,18 +2,12 @@
 pragma solidity ^0.8.20;
 
 interface IEventFundingManager {
-    event Deposit(
+    event DepositUsdt(
         address indexed tokenAddress,
         address indexed sender,
         uint256 amount
     );
 
-    event Withdraw(
-        address indexed tokenAddress,
-        address sender,
-        address withdrawAddress,
-        uint256 amount
-    );
     function depositUsdt(uint256 amount) external returns (bool);
     function bettingEvent(address event_pool, uint256 amount) external;
 }

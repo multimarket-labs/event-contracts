@@ -26,7 +26,7 @@ contract EventFundingManager is Initializable, OwnableUpgradeable, PausableUpgra
     function depositUsdt(uint256 amount) external whenNotPaused returns (bool) {
         IERC20(usdtTokenAddress).safeTransferFrom(msg.sender, address(this), amount);
         fundingBalanceForBetting[msg.sender][usdtTokenAddress] += amount;
-        emit Deposit(
+        emit DepositUsdt(
             usdtTokenAddress,
             msg.sender,
             amount
