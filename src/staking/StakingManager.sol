@@ -9,6 +9,9 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "../interfaces/token/IDaoRewardManager.sol";
 import "../interfaces/token/IChooseMeToken.sol";
+import "../interfaces/staking/pancake/IPancakeV3Pool.sol";
+import "../interfaces/staking/pancake/IV3NonfungiblePositionManager.sol";
+import "../interfaces/staking/pancake/IPancakeV3SwapCallback.sol";
 
 
 import { StakingManagerStorage } from "./StakingManagerStorage.sol";
@@ -32,6 +35,18 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         underlyingToken = _underlyingToken;
         stakingOperatorManager = _stakingOperatorManager;
         daoRewardManager = _daoRewardManager;
+    }
+
+    // 设置流动性池地址
+    function setPool(address _pool) external onlyOwner {
+        require(_pool != address(0), "Invalid pool address");
+        pool = _pool;
+    }
+
+    // 设置 NFT position token ID
+    function setPositionTokenId(uint256 _tokenId) external onlyOwner {
+        require(_tokenId > 0, "Invalid token ID");
+        positionTokenId = _tokenId;
     }
 
     function liquidityProviderDeposit(address myInviter, uint256 amount) external {
@@ -175,12 +190,136 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
 
     function addLiquidity(uint256 amount) external {
         // todo: amount, 将这个合约里面的一半的 USDT 买 CMO 代币，添加到流动性池里面
+        // 将所有购买节点的资金用于加 LP, 将这个合约里面的一半的 USDT 买 underlyingToken 代币，添加到流动性池里面
+        require(pool != address(0), "Pool not set");
+        require(amount > 0, "Amount must be greater than 0");
+        require(positionTokenId > 0, "Position token not initialized");
+
+        // 步骤1: 查询交易对池子的汇率价格和代币顺序
+        IPancakeV3Pool v3Pool = IPancakeV3Pool(pool);
+        (uint160 sqrtPriceX96,,,,,,) = v3Pool.slot0();
+        bool zeroForOne = USDT < underlyingToken;
+        uint160 sqrtPriceLimitX96;
+        if (zeroForOne) {
+            sqrtPriceLimitX96 = uint160((uint256(sqrtPriceX96) * 95) / 100);
+        } else {
+            sqrtPriceLimitX96 = uint160((uint256(sqrtPriceX96) * 105) / 100);
+        }
+
+        // 步骤2: 用一半的 amount (USDT) 去买 underlyingToken 代币
+        uint256 swapAmount = amount / 2;
+        uint256 remainingAmount = amount - swapAmount; // 剩余的一半 USDT
+
+        // 记录 swap 前的 underlyingToken 余额
+        uint256 underlyingTokenBefore = IERC20(underlyingToken).balanceOf(address(this));
+
+        IPancakeV3Pool(pool).swap(
+            address(this),
+            zeroForOne,
+            int256(swapAmount),
+            sqrtPriceLimitX96,
+            abi.encode(pool)
+        );
+
+        // 步骤3: 计算实际获得的 underlyingToken 数量
+        uint256 underlyingTokenAfter = IERC20(underlyingToken).balanceOf(address(this));
+        uint256 underlyingTokenReceived = underlyingTokenAfter - underlyingTokenBefore;
+
+        // underlyingTokenReceived: swap 实际获得的代币数量。remainingAmount: 剩余的一半 USDT
+        uint256 underlyingTokenBalance = underlyingTokenReceived;
+        uint256 usdtBalance = remainingAmount;
+
+        // 批准 Position Manager 使用代币
+        IERC20(underlyingToken).approve(POSITION_MANAGER, underlyingTokenBalance);
+        IERC20(USDT).approve(POSITION_MANAGER, usdtBalance);
+
+        // 根据池子中代币顺序设置 amount0 和 amount1
+        uint256 amount0Desired;
+        uint256 amount1Desired;
+        if (zeroForOne) {
+            amount0Desired = usdtBalance;
+            amount1Desired = underlyingTokenBalance;
+        } else {
+            amount0Desired = underlyingTokenBalance;
+            amount1Desired = usdtBalance;
+        }
+
+        // 构建增加流动性参数
+        IV3NonfungiblePositionManager.IncreaseLiquidityParams memory params =
+                            IV3NonfungiblePositionManager.IncreaseLiquidityParams({
+                tokenId: positionTokenId,
+                amount0Desired: amount0Desired,
+                amount1Desired: amount1Desired,
+                amount0Min: (amount0Desired * SLIPPAGE_TOLERANCE) / 100,
+                amount1Min: (amount1Desired * SLIPPAGE_TOLERANCE) / 100,
+                deadline: block.timestamp + 15 minutes
+            });
+        // 调用 increaseLiquidity 增加流动性
+        (uint128 liquidityAdded, uint256 amount0Used, uint256 amount1Used) =
+                                IV3NonfungiblePositionManager(POSITION_MANAGER).increaseLiquidity(params);
+
+        emit LiquidityAdded(positionTokenId, liquidityAdded, amount0Used, amount1Used);
+    }
+
+    // PancakeSwap V3 Swap 回调函数
+    function pancakeV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    ) external {
+        require(msg.sender == pool, "Invalid callback caller");
+
+        // 确定需要支付的代币和数量
+        if (amount0Delta > 0) {
+            address token0 = IPancakeV3Pool(pool).token0();
+            IERC20(token0).safeTransfer(msg.sender, uint256(amount0Delta));
+        }
+        if (amount1Delta > 0) {
+            address token1 = IPancakeV3Pool(pool).token1();
+            IERC20(token1).safeTransfer(msg.sender, uint256(amount1Delta));
+        }
     }
 
     function swapBurn(uint256 amount) external {
-        // todo: amount, 将 amount USDT 购买 CMO，销毁
+        // 将 amount USDT 全部用于购买 underlyingToken 代币，然后销毁
+        require(pool != address(0), "Pool not set");
+        require(amount > 0, "Amount must be greater than 0");
 
-        IChooseMeToken(underlyingToken).burn(address(this), 0);
+        // 步骤1: 查询交易对池子的汇率价格和代币顺序
+        IPancakeV3Pool v3Pool = IPancakeV3Pool(pool);
+        (uint160 sqrtPriceX96,,,,,,) = v3Pool.slot0();
+        bool zeroForOne = USDT < underlyingToken;
+        uint160 sqrtPriceLimitX96;
+        if (zeroForOne) {
+            // USDT -> underlyingToken，价格下降
+            sqrtPriceLimitX96 = uint160((uint256(sqrtPriceX96) * 95) / 100);
+        } else {
+            // underlyingToken -> USDT，价格上升
+            sqrtPriceLimitX96 = uint160((uint256(sqrtPriceX96) * 105) / 100);
+        }
+
+        // 步骤2: 用全部的 amount USDT 去买 underlyingToken 代币
+        // 记录 swap 前的 underlyingToken 余额
+        uint256 underlyingTokenBefore = IERC20(underlyingToken).balanceOf(address(this));
+
+        // 执行 swap
+        IPancakeV3Pool(pool).swap(
+            address(this),
+            zeroForOne,
+            int256(amount), // 使用全部 amount
+            sqrtPriceLimitX96,
+            abi.encode(pool)
+        );
+
+        // 步骤3: 计算实际获得的 underlyingToken 数量并销毁
+        uint256 underlyingTokenAfter = IERC20(underlyingToken).balanceOf(address(this));
+        uint256 underlyingTokenReceived = underlyingTokenAfter - underlyingTokenBefore;
+
+        // 销毁实际获得的代币
+        require(underlyingTokenReceived > 0, "No tokens received from swap");
+        IChooseMeToken(underlyingToken).burn(address(this), underlyingTokenReceived);
+
+        emit TokensBurned(amount, underlyingTokenReceived);
     }
 
     // ==============internal function================

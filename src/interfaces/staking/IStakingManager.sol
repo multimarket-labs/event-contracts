@@ -83,6 +83,18 @@ interface IStakingManager {
         uint256  blockNumber
     );
 
+    event LiquidityAdded (
+        uint256 indexed tokenId,
+        uint128 liquidity,
+        uint256 amount0,
+        uint256 amount1
+    );
+
+    event TokensBurned (
+        uint256 usdtAmount,
+        uint256 tokensBurned
+    );
+
     error InvalidAmountError(uint256 amount);
     error InvalidRewardTypeError(uint8 incomeType);
     error StakeHolderUnderStakingError(address tokenAddress);
