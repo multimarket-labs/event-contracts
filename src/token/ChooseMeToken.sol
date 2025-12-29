@@ -95,7 +95,7 @@ contract ChooseMeToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradea
 
     function _beforePoolAddress(chooseMePool memory _pool) internal virtual {
         require(
-            _pool.bottomPool != address(0),
+            _pool.nodePool != address(0),
             "ChooseMeToken _beforeAllocation:Missing allocate bottomPool address"
         );
         require(

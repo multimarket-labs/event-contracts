@@ -11,7 +11,7 @@ abstract contract ChooseMeTokenStorage {
     bool internal isAllocation;
 
     struct chooseMePool {
-        address  bottomPool;               // 底池
+        address  nodePool;                 // 底池
         address  daoRewardPool;            // dao 组织奖励
         address  airdropPool;              // 空投
         address  techRewardsPool;          // 技术
