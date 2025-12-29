@@ -91,11 +91,9 @@ interface IStakingManager {
 
     function liquidityProviderDeposit(address inviter, uint256 amount) external;
 
-    function getLiquidityProviderInfo(address liquidityProvider) external view returns (LiquidityProviderInfo);
+    function getLiquidityProvidersByType(uint8 stakingType) external view returns (address[] memory);
 
-    function getLiquidityProvidersByType(uint8 stakingType) external view returns (address[]);
-
-    function createLiquidityProviderReward(address lpAddress, uint256 amount) external;
+    function createLiquidityProviderReward(address lpAddress, uint256 amount, uint8 incomeType) external;
 
     function liquidityProviderRoundStakingOver(address lpAddress, uint256 lpStakingRound) external;
 

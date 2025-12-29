@@ -46,4 +46,5 @@ interface INodeManager {
     function purchaseNode(uint256 amount) external;
     function distributeRewards(address recipient, uint256 amount, uint8 incomeType) external;
     function claimReward(uint8 incomeType) external;
+    function addLiquidity() external;
 }

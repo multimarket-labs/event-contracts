@@ -7,6 +7,8 @@ import "@openzeppelin-upgrades/contracts/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import "../interfaces/token/IDaoRewardManager.sol";
+
 import { StakingManagerStorage } from "./StakingManagerStorage.sol";
 
 contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeable, StakingManagerStorage {
@@ -46,24 +48,24 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
 
         IERC20(underlyingToken).safeTransferFrom(msg.sender, address(this), amount);
 
-        (stakingType, endStakingTime) = liquidityProviderTypeAndAmount(amount);
+        (uint8 stakingType, uint256 endStakingTime) = liquidityProviderTypeAndAmount(amount);
 
         differentTypeLpList[stakingType].push(msg.sender);
 
-        uint256 endStakingTime = block.timestamp + stakingTimeInternal;
+        uint256 endStakingTimeDuration = block.timestamp + endStakingTime;
 
         LiquidityProviderInfo memory lpInfo = LiquidityProviderInfo({
             liquidityProvider: msg.sender,
             stakingType: stakingType,
             amount: amount,
             startTime: block.timestamp ,
-            endTime: endStakingTime,
+            endTime: endStakingTimeDuration,
             stakingStatus: 0    // 0: staking; 1: endStaking
         });
 
-        currentLiquidityProvider[msg.sender][lpStakingRound] = lpInfo;
+        currentLiquidityProvider[msg.sender][lpStakingRound[msg.sender]] = lpInfo;
 
-        if (!totalLpStaking[msg.sender].liquidityProvider == address(0)) {
+        if (totalLpStakingReward[msg.sender].liquidityProvider != address(0)) {
             totalLpStakingReward[msg.sender] = LiquidityProviderStakingReward({
                 liquidityProvider: msg.sender,
                 totalStaking: amount,
@@ -88,11 +90,7 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         );
     }
 
-    function getLiquidityProviderInfo(address liquidityProvider) external view returns (LiquidityProviderInfo) {
-        return liquidityProviders[msg.sender];
-    }
-
-    function getLiquidityProvidersByType(uint8 stakingType) external view returns (address[]) {
+    function getLiquidityProvidersByType(uint8 stakingType) external view returns (address[] memory) {
         return differentTypeLpList[stakingType];
     }
 
@@ -100,11 +98,11 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         require(lpAddress == address(0), "StakingManager.createLiquidityProviderReward: zero address");
         require(amount > 0, "StakingManager.createLiquidityProviderReward: amount should more than zero");
 
-        if (incomeType == StakingRewardType.DailyNormalReward) {
+        if (incomeType == uint8(StakingRewardType.DailyNormalReward)) {
             totalLpStakingReward[lpAddress].directReferralReward += amount;
-        } else if(incomeType == StakingRewardType.DirectReferralReward) {
+        } else if(incomeType == uint8(StakingRewardType.DirectReferralReward)) {
             totalLpStakingReward[lpAddress].directReferralReward += amount;
-        } else if(incomeType == StakingRewardType.TeamReferralReward && !teamOutOfReward[lpAddress]) {
+        } else if(incomeType == uint8(StakingRewardType.TeamReferralReward) && !teamOutOfReward[lpAddress]) {
             uint256 teamRewardAmount = totalLpStakingReward[lpAddress].teamReferralReward;  // CMT
             uint256 totalStakingAmount = totalLpStakingReward[lpAddress].totalStaking;      // USDT
 
@@ -115,9 +113,9 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
             } else {
                 uint256 lastTeamReward = (teamRewardAmount + amount) - (stakingToCmt * 3);
                 totalLpStakingReward[lpAddress].teamReferralReward += lastTeamReward;
-                outOfAchieveReturnsNode(lpAddress);
+                outOfAchieveReturnsNode(lpAddress, totalLpStakingReward[lpAddress].teamReferralReward);
             }
-        } else if(incomeType == StakingRewardType.FomoPoolReward) {
+        } else if(incomeType == uint8(StakingRewardType.FomoPoolReward)) {
             totalLpStakingReward[lpAddress].fomoPoolReward += amount;
         } else {
             revert InvalidRewardTypeError(incomeType);
@@ -152,11 +150,11 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
     function liquidityProviderClaimReward(uint256 amount) external {
         require(amount > 0, "StakingManager.liquidityProviderClaimReward: reward amount must more than zero");
 
-        if (amount > totalLpStaking[msg.sender].totalProfit) {
+        if (amount > totalLpStakingReward[msg.sender].totalReward) {
             revert InvalidRewardAmount(msg.sender, amount);
         }
 
-        totalLpStaking[msg.sender].totalProfit -= amount;
+        totalLpStakingReward[msg.sender].totalReward -= amount;
 
         uint256 toEventPredictionAmount = (amount * 20) / 100;
 
@@ -186,31 +184,31 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         uint8 stakingType;
         uint256 stakingTimeInternal;
         if (amount == t1Staking)  {
-            stakingType = StakingType.T1;
+            stakingType = uint8(StakingType.T1);
             stakingTimeInternal = t1StakingTimeInternal;
         } else if (amount == t2Staking) {
-            stakingType = StakingType.T2;
+            stakingType = uint8(StakingType.T2);
             stakingTimeInternal = t2StakingTimeInternal;
         } else if (amount == t3Staking) {
-            stakingType = StakingType.T3;
+            stakingType = uint8(StakingType.T3);
             stakingTimeInternal = t3StakingTimeInternal;
         }  else if (amount == t4Staking) {
-            stakingType = StakingType.T4;
+            stakingType = uint8(StakingType.T4);
             stakingTimeInternal = t4StakingTimeInternal;
         } else if (amount == t5Staking) {
-            stakingType = StakingType.T5;
+            stakingType = uint8(StakingType.T5);
             stakingTimeInternal = t5StakingTimeInternal;
         } else if (amount == t6Staking) {
-            stakingType = StakingType.T6;
+            stakingType = uint8(StakingType.T6);
             stakingTimeInternal = t6StakingTimeInternal;
         } else  {
-            revert InvalidAmount(amount);
+            revert InvalidAmountError(amount);
         }
 
         return (stakingType, stakingTimeInternal);
     }
 
-    function outOfAchieveReturnsNode(address lpAddress) internal {
+    function outOfAchieveReturnsNode(address lpAddress, uint256 teamRewardAmount) internal {
         teamOutOfReward[lpAddress] = true;
 
         emit outOfAchieveReturnsNodeExit({

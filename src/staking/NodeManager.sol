@@ -7,6 +7,8 @@ import "@openzeppelin-upgrades/contracts/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import "../interfaces/token/IDaoRewardManager.sol";
+
 import { NodeManagerStorage } from "./NodeManagerStorage.sol";
 
 contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, NodeManagerStorage  {
@@ -21,8 +23,9 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         _disableInitializers();
     }
 
-    function initialize(address initialOwner, address _underlyingToken, address _distributeRewardAddress) public initializer  {
+    function initialize(address initialOwner, IDaoRewardManager _daoRewardManager, address _underlyingToken, address _distributeRewardAddress) public initializer  {
         __Ownable_init(initialOwner);
+        daoRewardManager = _daoRewardManager;
         underlyingToken = _underlyingToken;
         distributeRewardAddress = _distributeRewardAddress;
     }
@@ -56,7 +59,7 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         require(amount > 0, "NodeManager.distributeRewards: amount must more than zero");
         require(incomeType <= uint256(NodeIncomeType.PromoteProfit), "Invalid income type");
 
-        nodeRewardTypeInfo[recipient][incomeType] += amount;
+        nodeRewardTypeInfo[recipient][incomeType].amount += amount;
 
         emit DistributeNodeRewards({
             recipient: recipient,
@@ -67,7 +70,7 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
 
     function claimReward(uint8 incomeType) external {
         require(incomeType <= uint256(NodeIncomeType.PromoteProfit), "Invalid income type");
-        uint256 rewardAmount = nodeRewardTypeInfo[recipient][incomeType].amount;
+        uint256 rewardAmount = nodeRewardTypeInfo[msg.sender][incomeType].amount;
 
         uint256 toEventPredictionAmount = (rewardAmount * 20) / 100;
 
@@ -76,19 +79,23 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
 
         daoRewardManager.withdraw(msg.sender, canWithdrawAmount);
 
-        nodeRewardTypeInfo[recipient][incomeType].amount = 0;
+        nodeRewardTypeInfo[msg.sender][incomeType].amount = 0;
+    }
+
+    function addLiquidity() external {
+        // todo: 将所有购买节点的资金用于加 LP
     }
 
     // ==============internal function================
     function matchNodeTypeByAmount(uint256 amount) internal view returns (uint8)  {
         uint8 buyNodeType;
         if (amount == buyDistributedNode)  {
-            buyNodeType = NodeType.DistributedNode;
+            buyNodeType = uint8(NodeType.DistributedNode);
         } else if (amount == buyClusterNode) {
-            buyNodeType = NodeType.ClusterNode;
+            buyNodeType = uint8(NodeType.ClusterNode);
         } else  {
             revert InvalidNodeTypeError(amount);
         }
-        return nodeType;
+        return buyNodeType;
     }
 }

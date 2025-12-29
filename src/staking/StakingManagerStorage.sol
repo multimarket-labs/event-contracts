@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-import "../../interfaces/staking/IStakingManager.sol";
-import "../../interfaces/token/IDaoRewardManager.sol";
+import "../interfaces/staking/IStakingManager.sol";
+import "../interfaces/token/IDaoRewardManager.sol";
 
 abstract contract StakingManagerStorage is IStakingManager {
     uint256 public constant t1Staking = 200 * 10 ** 6;
@@ -35,7 +35,7 @@ abstract contract StakingManagerStorage is IStakingManager {
     mapping(address => LiquidityProviderStakingReward) public totalLpStakingReward;
 
     mapping(uint8 => address[]) public differentTypeLpList;
-    mapping(address => address) private inviteRelationShip;
+    mapping(address => address) public inviteRelationShip;
     mapping(address => bool) public teamOutOfReward;
 
     uint256[100] private __gap;

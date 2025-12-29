@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
-import "../../interfaces/staking/INodeManager.sol";
+import "../interfaces/staking/INodeManager.sol";
+import "../interfaces/token/IDaoRewardManager.sol";
+
 
 abstract contract NodeManagerStorage is INodeManager {
     uint256 public constant buyDistributedNode = 500 * 10 ** 6;
@@ -10,6 +12,8 @@ abstract contract NodeManagerStorage is INodeManager {
     address public underlyingToken;
 
     address public distributeRewardAddress;
+
+    IDaoRewardManager public daoRewardManager;
 
     mapping(address => NodeBuyerInfo) public nodeBuyerInfo;
 

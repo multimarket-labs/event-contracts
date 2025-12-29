@@ -65,7 +65,7 @@ contract ChooseMeToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradea
 
     function poolAllocate() external onlyOwner {
         _beforeAllocation();
-        _mint(cmPool.bottomPool, (MaxTotalSupply * 2) / 10); // 20% of total supply
+        _mint(cmPool.nodePool, (MaxTotalSupply * 2) / 10); // 20% of total supply
         _mint(cmPool.daoRewardPool, (MaxTotalSupply * 6) / 10); // 60% of total supply
         _mint(cmPool.airdropPool, (MaxTotalSupply * 6 )/ 100); // 6% of total supply
         _mint(cmPool.techRewardsPool, (MaxTotalSupply * 5) / 100); // 5% of total supply
