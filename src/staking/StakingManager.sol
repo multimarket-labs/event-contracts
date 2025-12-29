@@ -202,7 +202,7 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         }
 
         uint256 swapAmount = amount / 2;
-        uint256 remainingAmount = amount - swapAmount; // 剩余的一半 USDT
+        uint256 remainingAmount = amount - swapAmount;
 
         uint256 underlyingTokenBefore = IERC20(underlyingToken).balanceOf(address(this));
 
@@ -242,8 +242,7 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
                 amount1Min: (amount1Desired * SLIPPAGE_TOLERANCE) / 100,
                 deadline: block.timestamp + 15 minutes
             });
-        (uint128 liquidityAdded, uint256 amount0Used, uint256 amount1Used) =
-                                IV3NonfungiblePositionManager(POSITION_MANAGER).increaseLiquidity(params);
+        (uint128 liquidityAdded, uint256 amount0Used, uint256 amount1Used) = IV3NonfungiblePositionManager(POSITION_MANAGER).increaseLiquidity(params);
 
         emit LiquidityAdded(positionTokenId, liquidityAdded, amount0Used, amount1Used);
     }

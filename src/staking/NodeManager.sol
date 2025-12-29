@@ -33,13 +33,11 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         distributeRewardAddress = _distributeRewardAddress;
     }
 
-    // 设置流动性池地址
     function setPool(address _pool) external onlyOwner {
         require(_pool != address(0), "Invalid pool address");
         pool = _pool;
     }
 
-    // 设置 NFT position token ID
     function setPositionTokenId(uint256 _tokenId) external onlyOwner {
         require(_tokenId > 0, "Invalid token ID");
         positionTokenId = _tokenId;
@@ -113,7 +111,7 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         }
 
         uint256 swapAmount = amount / 2;
-        uint256 remainingAmount = amount - swapAmount; // 剩余的一半 USDT
+        uint256 remainingAmount = amount - swapAmount;
 
         uint256 underlyingTokenBefore = IERC20(underlyingToken).balanceOf(address(this));
 

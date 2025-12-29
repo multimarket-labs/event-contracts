@@ -11,13 +11,12 @@ abstract contract NodeManagerStorage is INodeManager {
     uint256 public constant buyClusterNode = 1000 * 10 ** 6;
     address public constant USDT = 0x55d398326f99059fF775485246999027B3197955;
 
-    // PancakeSwap V3 配置
     address public constant POSITION_MANAGER = 0x46A15B0b27311cedF172AB29E4f4766fbE7F4364;
-    uint256 public constant SLIPPAGE_TOLERANCE = 95; // 5% 滑点容忍度
+    uint256 public constant SLIPPAGE_TOLERANCE = 95;
 
     address public underlyingToken;
     address public distributeRewardAddress;
-    address public pool; // V3 流动性池地址
+    address public pool;
     uint256 public positionTokenId; // NFT position token ID
 
     IDaoRewardManager public daoRewardManager;
