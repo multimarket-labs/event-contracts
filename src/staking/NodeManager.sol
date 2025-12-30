@@ -8,11 +8,19 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "../interfaces/token/IDaoRewardManager.sol";
+import "../interfaces/staking/pancake/IPancakeV3Pool.sol";
+import "../interfaces/staking/pancake/IV3NonfungiblePositionManager.sol";
+import "../interfaces/staking/pancake/IPancakeV3SwapCallback.sol";
+import "../interfaces/staking/IEventFundingManager.sol";
 
-import { NodeManagerStorage } from "./NodeManagerStorage.sol";
+import "./EventFundingManager.sol";
+import "../utils/SwapHelper.sol";
 
-contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, NodeManagerStorage  {
+import {NodeManagerStorage} from "./NodeManagerStorage.sol";
+
+contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, NodeManagerStorage {
     using SafeERC20 for IERC20;
+    using SwapHelper for *;
 
     modifier onlyDistributeRewardManager() {
         require(msg.sender == address(distributeRewardAddress), "onlyDistributeRewardManager");
@@ -23,11 +31,22 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         _disableInitializers();
     }
 
-    function initialize(address initialOwner, IDaoRewardManager _daoRewardManager, address _underlyingToken, address _distributeRewardAddress) public initializer  {
+    function initialize(address initialOwner, address _daoRewardManager, address _underlyingToken, address _distributeRewardAddress, address _eventFundingManager) public initializer {
         __Ownable_init(initialOwner);
-        daoRewardManager = _daoRewardManager;
+        daoRewardManager = IDaoRewardManager(_daoRewardManager);
         underlyingToken = _underlyingToken;
         distributeRewardAddress = _distributeRewardAddress;
+        eventFundingManager = IEventFundingManager(_eventFundingManager);
+    }
+
+    function setPool(address _pool) external onlyOwner {
+        require(_pool != address(0), "Invalid pool address");
+        pool = _pool;
+    }
+
+    function setPositionTokenId(uint256 _tokenId) external onlyOwner {
+        require(_tokenId > 0, "Invalid token ID");
+        positionTokenId = _tokenId;
     }
 
     function purchaseNode(uint256 amount) external {
@@ -74,7 +93,22 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
 
         uint256 toEventPredictionAmount = (rewardAmount * 20) / 100;
 
-        // todo 20% 兑换成 USDT 打入事件预测市场
+        if (toEventPredictionAmount > 0) {
+            daoRewardManager.withdraw(address(this), toEventPredictionAmount);
+
+            uint256 usdtAmount = SwapHelper.swapTokenToUsdt(
+                pool,
+                underlyingToken,
+                USDT,
+                toEventPredictionAmount,
+                address(this)
+            );
+
+            IERC20(USDT).approve(address(eventFundingManager), usdtAmount);
+
+            eventFundingManager.depositUsdt(usdtAmount);
+        }
+
         uint256 canWithdrawAmount = rewardAmount - toEventPredictionAmount;
 
         daoRewardManager.withdraw(msg.sender, canWithdrawAmount);
@@ -82,18 +116,70 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         nodeRewardTypeInfo[msg.sender][incomeType].amount = 0;
     }
 
-    function addLiquidity() external {
-        // todo: 将所有购买节点的资金用于加 LP
+    function addLiquidity(uint256 amount) external onlyOwner {
+        require(pool != address(0), "Pool not set");
+        require(amount > 0, "Amount must be greater than 0");
+        require(positionTokenId > 0, "Position token not initialized");
+
+        uint256 swapAmount = amount / 2;
+        uint256 remainingAmount = amount - swapAmount;
+
+        uint256 underlyingTokenReceived = SwapHelper.swapUsdtToToken(
+            pool,
+            USDT,
+            underlyingToken,
+            swapAmount,
+            address(this)
+        );
+
+        uint256 underlyingTokenBalance = underlyingTokenReceived;
+        uint256 usdtBalance = remainingAmount;
+
+        IERC20(underlyingToken).approve(POSITION_MANAGER, underlyingTokenBalance);
+        IERC20(USDT).approve(POSITION_MANAGER, usdtBalance);
+
+        bool zeroForOne = USDT < underlyingToken;
+        uint256 amount0Desired;
+        uint256 amount1Desired;
+        if (zeroForOne) {
+            amount0Desired = usdtBalance;
+            amount1Desired = underlyingTokenBalance;
+        } else {
+            amount0Desired = underlyingTokenBalance;
+            amount1Desired = usdtBalance;
+        }
+
+        IV3NonfungiblePositionManager.IncreaseLiquidityParams memory params =
+            IV3NonfungiblePositionManager.IncreaseLiquidityParams({
+                tokenId: positionTokenId,
+                amount0Desired: amount0Desired,
+                amount1Desired: amount1Desired,
+                amount0Min: (amount0Desired * SLIPPAGE_TOLERANCE) / 100,
+                amount1Min: (amount1Desired * SLIPPAGE_TOLERANCE) / 100,
+                deadline: block.timestamp + 15 minutes
+            });
+        (uint128 liquidityAdded, uint256 amount0Used, uint256 amount1Used) =
+            IV3NonfungiblePositionManager(POSITION_MANAGER).increaseLiquidity(params);
+
+        emit LiquidityAdded(positionTokenId, liquidityAdded, amount0Used, amount1Used);
     }
 
-    // ==============internal function================
+    function pancakeV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    ) external {
+        require(msg.sender == pool, "Invalid callback caller");
+        SwapHelper.handleSwapCallback(pool, amount0Delta, amount1Delta, msg.sender);
+    }
+
     function matchNodeTypeByAmount(uint256 amount) internal view returns (uint8)  {
         uint8 buyNodeType;
-        if (amount == buyDistributedNode)  {
+        if (amount == buyDistributedNode) {
             buyNodeType = uint8(NodeType.DistributedNode);
         } else if (amount == buyClusterNode) {
             buyNodeType = uint8(NodeType.ClusterNode);
-        } else  {
+        } else {
             revert InvalidNodeTypeError(amount);
         }
         return buyNodeType;

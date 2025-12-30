@@ -6,8 +6,6 @@ import "../../interfaces/token/IFomoTreasureManager.sol";
 abstract contract  FomoTreasureManagerStorage is IFomoTreasureManager {
     address public constant NativeTokenAddress = address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE);
 
-
-    address public rewardTokenAddress;
     address public underlyingToken;
 
     mapping(address => uint256) public FundingBalance;

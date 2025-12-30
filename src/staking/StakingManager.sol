@@ -8,11 +8,19 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "../interfaces/token/IDaoRewardManager.sol";
+import "../interfaces/token/IChooseMeToken.sol";
+import "../interfaces/staking/pancake/IPancakeV3Pool.sol";
+import "../interfaces/staking/pancake/IV3NonfungiblePositionManager.sol";
+import "../interfaces/staking/pancake/IPancakeV3SwapCallback.sol";
+import "../interfaces/staking/IEventFundingManager.sol";
+import "../utils/SwapHelper.sol";
+
 
 import { StakingManagerStorage } from "./StakingManagerStorage.sol";
 
 contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeable, StakingManagerStorage {
     using SafeERC20 for IERC20;
+    using SwapHelper for *;
 
     constructor(){
         _disableInitializers();
@@ -25,11 +33,22 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
 
     receive() external payable {}
 
-    function initialize(address initialOwner, address _underlyingToken, address _stakingOperatorManager, IDaoRewardManager _daoRewardManager) public initializer  {
+    function initialize(address initialOwner, address _underlyingToken, address _stakingOperatorManager, address _daoRewardManager, address _eventFundingManager) public initializer  {
         __Ownable_init(initialOwner);
         underlyingToken = _underlyingToken;
         stakingOperatorManager = _stakingOperatorManager;
-        daoRewardManager = _daoRewardManager;
+        daoRewardManager = IDaoRewardManager(_daoRewardManager);
+        eventFundingManager = IEventFundingManager(_eventFundingManager);
+    }
+
+    function setPool(address _pool) external onlyOwner {
+        require(_pool != address(0), "Invalid pool address");
+        pool = _pool;
+    }
+
+    function setPositionTokenId(uint256 _tokenId) external onlyOwner {
+        require(_tokenId > 0, "Invalid token ID");
+        positionTokenId = _tokenId;
     }
 
     function liquidityProviderDeposit(address myInviter, uint256 amount) external {
@@ -158,7 +177,20 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
 
         uint256 toEventPredictionAmount = (amount * 20) / 100;
 
-        // todo 20% 兑换成 USDT 打入事件预测市场
+        if (toEventPredictionAmount > 0) {
+            daoRewardManager.withdraw(address(this), toEventPredictionAmount);
+
+            uint256 usdtAmount = SwapHelper.swapTokenToUsdt(
+                pool,
+                underlyingToken,
+                USDT,
+                toEventPredictionAmount,
+                address(this)
+            );
+
+            IERC20(USDT).approve(address(eventFundingManager), usdtAmount);
+            eventFundingManager.depositUsdt(usdtAmount);
+        }
 
         uint256 canWithdrawAmount = amount - toEventPredictionAmount;
 
@@ -171,12 +203,75 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         });
     }
 
-    function addLiquidity() external {
+    function addLiquidity(uint256 amount) external {
+        require(pool != address(0), "Pool not set");
+        require(amount > 0, "Amount must be greater than 0");
+        require(positionTokenId > 0, "Position token not initialized");
 
+        uint256 swapAmount = amount / 2;
+        uint256 remainingAmount = amount - swapAmount;
+
+        uint256 underlyingTokenReceived = SwapHelper.swapUsdtToToken(
+            pool,
+            USDT,
+            underlyingToken,
+            swapAmount,
+            address(this)
+        );
+
+        uint256 underlyingTokenBalance = underlyingTokenReceived;
+        uint256 usdtBalance = remainingAmount;
+
+        IERC20(underlyingToken).approve(POSITION_MANAGER, underlyingTokenBalance);
+        IERC20(USDT).approve(POSITION_MANAGER, usdtBalance);
+
+        bool zeroForOne = USDT < underlyingToken;
+        uint256 amount0Desired;
+        uint256 amount1Desired;
+        if (zeroForOne) {
+            amount0Desired = usdtBalance;
+            amount1Desired = underlyingTokenBalance;
+        } else {
+            amount0Desired = underlyingTokenBalance;
+            amount1Desired = usdtBalance;
+        }
+
+        IV3NonfungiblePositionManager.IncreaseLiquidityParams memory params =
+                            IV3NonfungiblePositionManager.IncreaseLiquidityParams({
+                tokenId: positionTokenId,
+                amount0Desired: amount0Desired,
+                amount1Desired: amount1Desired,
+                amount0Min: (amount0Desired * SLIPPAGE_TOLERANCE) / 100,
+                amount1Min: (amount1Desired * SLIPPAGE_TOLERANCE) / 100,
+                deadline: block.timestamp + 15 minutes
+            });
+        (uint128 liquidityAdded, uint256 amount0Used, uint256 amount1Used) = IV3NonfungiblePositionManager(POSITION_MANAGER).increaseLiquidity(params);
+
+        emit LiquidityAdded(positionTokenId, liquidityAdded, amount0Used, amount1Used);
     }
 
-    function swapBurn() external {
+    function pancakeV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    ) external {
+        require(msg.sender == pool, "Invalid callback caller");
+        SwapHelper.handleSwapCallback(pool, amount0Delta, amount1Delta, msg.sender);
+    }
 
+    function swapBurn(uint256 amount) external {
+        uint256 underlyingTokenReceived = SwapHelper.swapUsdtToToken(
+            pool,
+            USDT,
+            underlyingToken,
+            amount,
+            address(this)
+        );
+
+        require(underlyingTokenReceived > 0, "No tokens received from swap");
+        IChooseMeToken(underlyingToken).burn(address(this), underlyingTokenReceived);
+
+        emit TokensBurned(amount, underlyingTokenReceived);
     }
 
     // ==============internal function================

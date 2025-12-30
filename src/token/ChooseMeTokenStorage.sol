@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
-abstract contract ChooseMeTokenStorage {
+import "../interfaces/token/IChooseMeToken.sol";
+
+
+abstract contract ChooseMeTokenStorage is IChooseMeToken{
     uint256 public constant MaxTotalSupply = 1_000_000_000 * 10 ** 6;
 
     uint256 public _lpBurnedTokens;
@@ -11,7 +14,7 @@ abstract contract ChooseMeTokenStorage {
     bool internal isAllocation;
 
     struct chooseMePool {
-        address  nodePool;                 // 底池
+        address  nodePool;                 // 底池(节点收入加池子)
         address  daoRewardPool;            // dao 组织奖励
         address  airdropPool;              // 空投
         address  techRewardsPool;          // 技术

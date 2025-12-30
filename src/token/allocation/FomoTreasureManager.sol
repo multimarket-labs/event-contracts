@@ -25,9 +25,8 @@ contract FomoTreasureManager is Initializable, OwnableUpgradeable, PausableUpgra
         );
     }
 
-    function initialize(address initialOwner, address _rewardTokenAddress, address _underlyingToken) public initializer  {
+    function initialize(address initialOwner,address _underlyingToken) public initializer  {
         __Ownable_init(initialOwner);
-        rewardTokenAddress = _rewardTokenAddress;
         underlyingToken = _underlyingToken;
     }
 
@@ -73,7 +72,7 @@ contract FomoTreasureManager is Initializable, OwnableUpgradeable, PausableUpgra
 
         FundingBalance[underlyingToken] -= amount;
 
-        IERC20(rewardTokenAddress).safeTransferFrom(address(this), recipient, amount);
+        IERC20(underlyingToken).safeTransferFrom(address(this), recipient, amount);
 
         emit Withdraw(
             underlyingToken,
@@ -86,6 +85,6 @@ contract FomoTreasureManager is Initializable, OwnableUpgradeable, PausableUpgra
 
     // ========= internal =========
     function _tokenBalance() internal view virtual returns (uint256) {
-        return IERC20(rewardTokenAddress).balanceOf(address(this));
+        return IERC20(underlyingToken).balanceOf(address(this));
     }
 }

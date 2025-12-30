@@ -39,6 +39,13 @@ interface INodeManager {
         uint8 incomeType
     );
 
+    event LiquidityAdded (
+        uint256 indexed tokenId,
+        uint128 liquidity,
+        uint256 amount0,
+        uint256 amount1
+    );
+
     error InvalidNodeTypeError(uint256 amount);
     error HaveAlreadyBuyNode(address buyer);
 
@@ -46,5 +53,5 @@ interface INodeManager {
     function purchaseNode(uint256 amount) external;
     function distributeRewards(address recipient, uint256 amount, uint8 incomeType) external;
     function claimReward(uint8 incomeType) external;
-    function addLiquidity() external;
+    function addLiquidity(uint256 amount) external;
 }
