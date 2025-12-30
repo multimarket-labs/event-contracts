@@ -17,3 +17,4 @@ docs/
 .vscode/
 
 deployed_addresses.json
+foundry.lock

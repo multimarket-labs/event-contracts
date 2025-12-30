@@ -30,6 +30,14 @@ contract FomoTreasureManager is Initializable, OwnableUpgradeable, PausableUpgra
         underlyingToken = _underlyingToken;
     }
 
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
     function deposit() external payable whenNotPaused returns (bool) {
         FundingBalance[NativeTokenAddress] += msg.value;
         emit Deposit(
@@ -69,7 +77,6 @@ contract FomoTreasureManager is Initializable, OwnableUpgradeable, PausableUpgra
 
     function withdrawErc20(address recipient, uint256 amount) external whenNotPaused returns (bool){
         require(amount <= _tokenBalance(), "FomoTreasureManager: withdraw erc20 amount more token balance in this contracts");
-
         FundingBalance[underlyingToken] -= amount;
 
         IERC20(underlyingToken).safeTransferFrom(address(this), recipient, amount);

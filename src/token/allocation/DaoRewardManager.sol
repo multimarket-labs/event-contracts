@@ -26,7 +26,7 @@ contract DaoRewardManager is Initializable, OwnableUpgradeable, PausableUpgradea
     function withdraw(address recipient, uint256 amount) external {
         require(amount <= _tokenBalance(), "DaoRewardManager: withdraw amount more token balance in this contracts");
 
-        IERC20(rewardTokenAddress).safeTransferFrom(address(this), recipient, amount);
+        IERC20(rewardTokenAddress).safeTransfer(recipient, amount);
     }
 
 
