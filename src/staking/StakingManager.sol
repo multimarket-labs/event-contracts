@@ -31,8 +31,19 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         _;
     }
 
+    /**
+     * @dev 接收原生代币（BNB）
+     */
     receive() external payable {}
 
+    /**
+     * @dev 初始化质押管理器合约
+     * @param initialOwner 初始所有者地址
+     * @param _underlyingToken 底层代币地址（CMT）
+     * @param _stakingOperatorManager 质押运营管理器地址
+     * @param _daoRewardManager DAO 奖励管理合约地址
+     * @param _eventFundingManager 事件资金管理合约地址
+     */
     function initialize(address initialOwner, address _underlyingToken, address _stakingOperatorManager, address _daoRewardManager, address _eventFundingManager) public initializer  {
         __Ownable_init(initialOwner);
         underlyingToken = _underlyingToken;
@@ -41,16 +52,29 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         eventFundingManager = IEventFundingManager(_eventFundingManager);
     }
 
+    /**
+     * @dev 设置交易池地址
+     * @param _pool Pancake V3 交易池地址
+     */
     function setPool(address _pool) external onlyOwner {
         require(_pool != address(0), "Invalid pool address");
         pool = _pool;
     }
 
+    /**
+     * @dev 设置流动性仓位 NFT ID
+     * @param _tokenId Pancake V3 流动性仓位的 NFT Token ID
+     */
     function setPositionTokenId(uint256 _tokenId) external onlyOwner {
         require(_tokenId > 0, "Invalid token ID");
         positionTokenId = _tokenId;
     }
 
+    /**
+     * @dev 流动性提供者质押存款
+     * @param myInviter 邀请人地址
+     * @param amount 质押金额，必须匹配 T1-T6 中的一种质押类型
+     */
     function liquidityProviderDeposit(address myInviter, uint256 amount) external {
         if (
             amount != t1Staking &&
@@ -109,10 +133,21 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         );
     }
 
+    /**
+     * @dev 获取指定类型的流动性提供者列表
+     * @param stakingType 质押类型（0-T1, 1-T2, ... 5-T6）
+     * @return 该类型所有流动性提供者的地址数组
+     */
     function getLiquidityProvidersByType(uint8 stakingType) external view returns (address[] memory) {
         return differentTypeLpList[stakingType];
     }
 
+    /**
+     * @dev 创建流动性提供者奖励（仅质押运营管理器可调用）
+     * @param lpAddress 流动性提供者地址
+     * @param amount 奖励金额
+     * @param incomeType 收益类型（0-日常普通奖励, 1-直推奖励, 2-团队奖励, 3-FOMO池奖励）
+     */
     function createLiquidityProviderReward(address lpAddress, uint256 amount, uint8 incomeType) external onlyStakingOperatorManager {
         require(lpAddress != address(0), "StakingManager.createLiquidityProviderReward: zero address");
         require(amount > 0, "StakingManager.createLiquidityProviderReward: amount should more than zero");
@@ -149,6 +184,11 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         });
     }
 
+    /**
+     * @dev 标记流动性提供者某轮质押结束（仅质押运营管理器可调用）
+     * @param lpAddress 流动性提供者地址
+     * @param lpStakingRound 质押轮次
+     */
     function liquidityProviderRoundStakingOver(address lpAddress, uint256 lpStakingRound) external onlyStakingOperatorManager {
         require(lpAddress != address(0), "StakingManager.liquidityProviderRoundStakingOver: lp address is zero");
 
@@ -166,6 +206,11 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         });
     }
 
+    /**
+     * @dev 流动性提供者领取奖励
+     * @param amount 要领取的奖励金额
+     * @notice 20% 的奖励将被强制扣留并转换为 USDT 存入事件预测市场
+     */
     function liquidityProviderClaimReward(uint256 amount) external {
         require(amount > 0, "StakingManager.liquidityProviderClaimReward: reward amount must more than zero");
 
@@ -203,6 +248,11 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         });
     }
 
+    /**
+     * @dev 添加流动性到 Pancake V3 池
+     * @param amount 要添加的 USDT 总量
+     * @notice 将 50% 的 USDT 兑换为底层代币，然后添加流动性
+     */
     function addLiquidity(uint256 amount) external {
         require(pool != address(0), "Pool not set");
         require(amount > 0, "Amount must be greater than 0");
@@ -250,6 +300,12 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         emit LiquidityAdded(positionTokenId, liquidityAdded, amount0Used, amount1Used);
     }
 
+    /**
+     * @dev Pancake V3 交换回调函数
+     * @param amount0Delta token0 的变化量
+     * @param amount1Delta token1 的变化量
+     * @param data 回调数据
+     */
     function pancakeV3SwapCallback(
         int256 amount0Delta,
         int256 amount1Delta,
@@ -259,6 +315,10 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         SwapHelper.handleSwapCallback(pool, amount0Delta, amount1Delta, msg.sender);
     }
 
+    /**
+     * @dev 将 USDT 兑换为底层代币并销毁
+     * @param amount 要兑换的 USDT 金额
+     */
     function swapBurn(uint256 amount) external {
         uint256 underlyingTokenReceived = SwapHelper.swapUsdtToToken(
             pool,
@@ -275,6 +335,12 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
     }
 
     // ==============internal function================
+    /**
+     * @dev 根据质押金额确定质押类型和锁定时间
+     * @param amount 质押金额
+     * @return stakingType 质押类型
+     * @return stakingTimeInternal 锁定时间（秒）
+     */
     function liquidityProviderTypeAndAmount(uint256 amount) internal view returns (uint8, uint256)  {
         uint8 stakingType;
         uint256 stakingTimeInternal;
@@ -303,6 +369,11 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         return (stakingType, stakingTimeInternal);
     }
 
+    /**
+     * @dev 标记节点已达到团队奖励上限（3倍质押金额）
+     * @param lpAddress 流动性提供者地址
+     * @param teamRewardAmount 团队奖励总金额
+     */
     function outOfAchieveReturnsNode(address lpAddress, uint256 teamRewardAmount) internal {
         teamOutOfReward[lpAddress] = true;
 

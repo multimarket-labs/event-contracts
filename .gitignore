@@ -18,3 +18,9 @@ docs/
 
 deployed_addresses.json
 foundry.lock
+bun.lock
+package.json
+tsconfig.json
+node_modules/
+sscript/
+**/__*

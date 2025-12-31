@@ -16,13 +16,26 @@ contract DaoRewardManager is Initializable, OwnableUpgradeable, PausableUpgradea
         _disableInitializers();
     }
 
+    /**
+     * @dev 接收原生代币（BNB）
+     */
     receive() external payable {}
 
+    /**
+     * @dev 初始化 DAO 奖励管理器合约
+     * @param initialOwner 初始所有者地址
+     * @param _rewardTokenAddress 奖励代币地址（CMT）
+     */
     function initialize(address initialOwner, address _rewardTokenAddress) public initializer  {
         __Ownable_init(initialOwner);
         rewardTokenAddress = _rewardTokenAddress;
     }
 
+    /**
+     * @dev 从奖励池中提取代币
+     * @param recipient 接收人地址
+     * @param amount 提取金额
+     */
     function withdraw(address recipient, uint256 amount) external {
         require(amount <= _tokenBalance(), "DaoRewardManager: withdraw amount more token balance in this contracts");
 
@@ -31,6 +44,10 @@ contract DaoRewardManager is Initializable, OwnableUpgradeable, PausableUpgradea
 
 
     // ========= internal =========
+    /**
+     * @dev 获取合约中的代币余额
+     * @return 合约中的代币余额
+     */
     function _tokenBalance() internal view virtual returns (uint256) {
         return IERC20(rewardTokenAddress).balanceOf(address(this));
     }
