@@ -43,9 +43,10 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
      * @param _daoRewardManager DAO 奖励管理合约地址
      * @param _eventFundingManager 事件资金管理合约地址
      */
-    function initialize(address initialOwner, address _underlyingToken, address _stakingOperatorManager, address _daoRewardManager, address _eventFundingManager) public initializer  {
+    function initialize(address initialOwner, address _underlyingToken,address _usdt, address _stakingOperatorManager, address _daoRewardManager, address _eventFundingManager) public initializer  {
         __Ownable_init(initialOwner);
         underlyingToken = _underlyingToken;
+        USDT = _usdt;
         stakingOperatorManager = _stakingOperatorManager;
         daoRewardManager = IDaoRewardManager(_daoRewardManager);
         eventFundingManager = IEventFundingManager(_eventFundingManager);
@@ -252,7 +253,7 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
      * @param amount 要添加的 USDT 总量
      * @notice 将 50% 的 USDT 兑换为底层代币，然后添加流动性
      */
-    function addLiquidity(uint256 amount) external {
+    function addLiquidity(uint256 amount) external onlyStakingOperatorManager {
         require(pool != address(0), "Pool not set");
         require(amount > 0, "Amount must be greater than 0");
         require(positionTokenId > 0, "Position token not initialized");
@@ -260,6 +261,7 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         uint256 swapAmount = amount / 2;
         uint256 remainingAmount = amount - swapAmount;
 
+        IERC20(USDT).approve(POSITION_MANAGER, amount);
         uint256 underlyingTokenReceived = SwapHelper.swapUsdtToToken(
             pool,
             USDT,
@@ -272,7 +274,6 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         uint256 usdtBalance = remainingAmount;
 
         IERC20(underlyingToken).approve(POSITION_MANAGER, underlyingTokenBalance);
-        IERC20(USDT).approve(POSITION_MANAGER, usdtBalance);
 
         bool zeroForOne = USDT < underlyingToken;
         uint256 amount0Desired;
@@ -318,7 +319,8 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
      * @dev 将 USDT 兑换为底层代币并销毁
      * @param amount 要兑换的 USDT 金额
      */
-    function swapBurn(uint256 amount) external {
+    function swapBurn(uint256 amount) external onlyStakingOperatorManager {
+        IERC20(USDT).approve(POSITION_MANAGER, amount);
         uint256 underlyingTokenReceived = SwapHelper.swapUsdtToToken(
             pool,
             USDT,

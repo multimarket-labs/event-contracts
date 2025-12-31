@@ -24,13 +24,13 @@ abstract contract StakingManagerStorage is IStakingManager {
     uint256 public constant t6Staking = 14000 * 10 ** 6;
     uint256 public constant t6StakingTimeInternal = 604800;
 
-    address public constant USDT = 0x55d398326f99059fF775485246999027B3197955;
     address public constant POSITION_MANAGER = 0x46A15B0b27311cedF172AB29E4f4766fbE7F4364;
     uint256 public constant SLIPPAGE_TOLERANCE = 95;
 
     IDaoRewardManager public daoRewardManager;
     IEventFundingManager public eventFundingManager;
 
+    address public USDT;
     address public underlyingToken;
     address public stakingOperatorManager;
     address public pool;

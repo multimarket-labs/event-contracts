@@ -35,7 +35,8 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      * @dev 初始化合约
      * @param initialOwner 初始所有者地址
      * @param _daoRewardManager DAO 奖励管理合约地址
-     * @param _USDT 底层代币地址
+     * @param _underlyingToken 底层代币地址
+     * @param _usdt usdt
      * @param _distributeRewardAddress 奖励分发管理地址
      * @param _eventFundingManager 事件资金管理合约地址
      */
@@ -122,6 +123,7 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     function claimReward(uint8 incomeType) external {
         require(incomeType <= uint256(NodeIncomeType.PromoteProfit), "Invalid income type");
         uint256 rewardAmount = nodeRewardTypeInfo[msg.sender][incomeType].amount;
+        nodeRewardTypeInfo[msg.sender][incomeType].amount = 0;
 
         uint256 toEventPredictionAmount = (rewardAmount * 20) / 100;
 
@@ -137,15 +139,11 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
             );
 
             IERC20(USDT).approve(address(eventFundingManager), usdtAmount);
-
             eventFundingManager.depositUsdt(usdtAmount);
         }
 
         uint256 canWithdrawAmount = rewardAmount - toEventPredictionAmount;
-
         daoRewardManager.withdraw(msg.sender, canWithdrawAmount);
-
-        nodeRewardTypeInfo[msg.sender][incomeType].amount = 0;
     }
 
     /**

@@ -44,7 +44,7 @@ contract DaoRewardManagerTest is Test {
         daoRewardManager = DaoRewardManager(payable(address(proxy)));
 
         // Initialize DaoRewardManager
-        daoRewardManager.initialize(owner, address(mockToken));
+        daoRewardManager.initialize(owner, address(mockToken), caller, caller);
 
         // Transfer tokens to DaoRewardManager
         mockToken.transfer(address(daoRewardManager), 1000000 * 10 ** 18);
@@ -177,16 +177,15 @@ contract DaoRewardManagerTest is Test {
         assertEq(mockToken.balanceOf(user2), withdrawAmount2, "User2 should have second withdraw amount");
     }
 
-    function testAnyoneCanCallWithdraw() public {
+    function testUnauthorizedCallerCannotWithdraw() public {
         uint256 withdrawAmount = 1000 * 10 ** 18;
 
-        // Test that non-owner, non-privileged address can call withdraw
+        // Test that non-authorized address cannot call withdraw
         address randomCaller = address(0x999);
         
         vm.prank(randomCaller);
+        vm.expectRevert("DaoRewardManager: caller is not authorized");
         daoRewardManager.withdraw(user1, withdrawAmount);
-
-        assertEq(mockToken.balanceOf(user1), withdrawAmount, "Withdraw should succeed from any caller");
     }
 
     function testWithdrawToContractAddress() public {

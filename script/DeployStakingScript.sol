@@ -107,6 +107,7 @@ contract DeployStakingScript is Script {
                 deployerAddress,
                 address(daoRewardManager),
                 address(chooseMeToken),
+                usdtTokenAddress,
                 distributeRewardAddress,
                 address(eventFundingManager)
             )
@@ -119,6 +120,7 @@ contract DeployStakingScript is Script {
                 StakingManager.initialize.selector,
                 deployerAddress,
                 address(chooseMeToken),
+                usdtTokenAddress,
                 chooseMeMultiSign,
                 address(daoRewardManager),
                 address(eventFundingManager)
@@ -131,7 +133,9 @@ contract DeployStakingScript is Script {
             abi.encodeWithSelector(
                 DaoRewardManager.initialize.selector,
                 deployerAddress,
-                address(chooseMeToken)
+                address(chooseMeToken),
+                address(nodeManager),
+                address(stakingManager)
             )
         );
 
@@ -161,6 +165,7 @@ contract DeployStakingScript is Script {
         console.log("deploy proxyNodeManager:", address(proxyNodeManager));
         console.log("deploy proxyDaoRewardManager:", address(proxyDaoRewardManager));
         console.log("deploy proxyFomoTreasureManager:", address(proxyFomoTreasureManager));
+        console.log("deploy proxyEventFundingManager:", address(proxyEventFundingManager));
 
         vm.stopBroadcast();
     }

@@ -6,14 +6,21 @@ import "@openzeppelin-upgrades/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgrades/contracts/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import { DaoRewardManagerStorage } from "./DaoRewardManagerStorage.sol";
 
 contract DaoRewardManager is Initializable, OwnableUpgradeable, PausableUpgradeable, DaoRewardManagerStorage {
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.AddressSet;
 
     constructor(){
         _disableInitializers();
+    }
+
+    modifier onAuthorizedCaller() {
+        require(authorizedCallers.contains(msg.sender), "DaoRewardManager: caller is not authorized");
+        _;
     }
 
     /**
@@ -26,9 +33,11 @@ contract DaoRewardManager is Initializable, OwnableUpgradeable, PausableUpgradea
      * @param initialOwner 初始所有者地址
      * @param _rewardTokenAddress 奖励代币地址（CMT）
      */
-    function initialize(address initialOwner, address _rewardTokenAddress) public initializer  {
+    function initialize(address initialOwner, address _rewardTokenAddress, address _nodeManager, address _stakingManager) public initializer  {
         __Ownable_init(initialOwner);
         rewardTokenAddress = _rewardTokenAddress;
+        authorizedCallers.add(_nodeManager);
+        authorizedCallers.add(_stakingManager);
     }
 
     /**
@@ -36,7 +45,7 @@ contract DaoRewardManager is Initializable, OwnableUpgradeable, PausableUpgradea
      * @param recipient 接收人地址
      * @param amount 提取金额
      */
-    function withdraw(address recipient, uint256 amount) external {
+    function withdraw(address recipient, uint256 amount) external onAuthorizedCaller {
         require(amount <= _tokenBalance(), "DaoRewardManager: withdraw amount more token balance in this contracts");
 
         IERC20(rewardTokenAddress).safeTransfer(recipient, amount);

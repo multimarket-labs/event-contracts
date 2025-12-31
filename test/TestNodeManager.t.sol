@@ -60,8 +60,9 @@ contract NodeManagerTest is Test {
         TransparentUpgradeableProxy daoProxy = new TransparentUpgradeableProxy(address(daoLogic), owner, "");
         daoRewardManager = DaoRewardManager(payable(address(daoProxy)));
         
-        // Initialize DaoRewardManager
-        daoRewardManager.initialize(owner, address(mockToken));
+        // Initialize DaoRewardManager (需要 4 个参数：owner, rewardToken, nodeManager, stakingManager)
+        // 先使用临时地址，后续会设置实际的 NodeManager
+        daoRewardManager.initialize(owner, address(mockToken), address(0x1), address(0x2));
         
         // Mint reward tokens to DaoRewardManager
         mockToken.mint(address(daoRewardManager), 1000000 * 10 ** 6);
@@ -72,11 +73,12 @@ contract NodeManagerTest is Test {
 
         nodeManager = NodeManager(address(proxy));
 
-        // Initialize NodeManager
+        // Initialize NodeManager (需要 6 个参数：owner, daoRewardManager, underlyingToken, usdt, distributeRewardAddress, eventFundingManager)
         nodeManager.initialize(
             owner, 
             address(daoRewardManager), 
-            address(mockToken), 
+            address(mockToken),
+            address(mockToken), // usdt 参数，使用相同的 mockToken
             distributeRewardManager,
             address(mockEventFundingManager)
         );
