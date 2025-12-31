@@ -35,14 +35,15 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      * @dev 初始化合约
      * @param initialOwner 初始所有者地址
      * @param _daoRewardManager DAO 奖励管理合约地址
-     * @param _underlyingToken 底层代币地址
+     * @param _USDT 底层代币地址
      * @param _distributeRewardAddress 奖励分发管理地址
      * @param _eventFundingManager 事件资金管理合约地址
      */
-    function initialize(address initialOwner, address _daoRewardManager, address _underlyingToken, address _distributeRewardAddress, address _eventFundingManager) public initializer {
+    function initialize(address initialOwner, address _daoRewardManager, address _underlyingToken,address _usdt, address _distributeRewardAddress, address _eventFundingManager) public initializer {
         __Ownable_init(initialOwner);
         daoRewardManager = IDaoRewardManager(_daoRewardManager);
         underlyingToken = _underlyingToken;
+        USDT = _usdt;
         distributeRewardAddress = _distributeRewardAddress;
         eventFundingManager = IEventFundingManager(_eventFundingManager);
     }
@@ -76,7 +77,7 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
 
         uint8 buyNodeType = matchNodeTypeByAmount(amount);
 
-        IERC20(underlyingToken).safeTransferFrom(msg.sender, address(this), amount);
+        IERC20(USDT).safeTransferFrom(msg.sender, address(this), amount);
 
         NodeBuyerInfo memory buyerInfo = NodeBuyerInfo({
             buyer: msg.sender,
@@ -159,6 +160,7 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
 
         uint256 swapAmount = amount / 2;
         uint256 remainingAmount = amount - swapAmount;
+        IERC20(USDT).approve(POSITION_MANAGER, amount);
 
         uint256 underlyingTokenReceived = SwapHelper.swapUsdtToToken(
             pool,
@@ -172,8 +174,6 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         uint256 usdtBalance = remainingAmount;
 
         IERC20(underlyingToken).approve(POSITION_MANAGER, underlyingTokenBalance);
-        IERC20(USDT).approve(POSITION_MANAGER, usdtBalance);
-
         bool zeroForOne = USDT < underlyingToken;
         uint256 amount0Desired;
         uint256 amount1Desired;

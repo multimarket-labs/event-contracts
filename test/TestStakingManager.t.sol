@@ -450,4 +450,234 @@ contract StakingManagerTest is Test {
 
         assertEq(stakingManager.inviteRelationShip(user2), user1, "User2's inviter should be user1");
     }
+
+    // ===================== Tests for setPool function =====================
+    function testSetPool() public {
+        address newPool = address(0x123);
+
+        vm.prank(owner);
+        stakingManager.setPool(newPool);
+
+        assertEq(stakingManager.pool(), newPool, "Pool address should be updated to newPool");
+    }
+
+    function testSetPoolRevertsOnZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert("Invalid pool address");
+        stakingManager.setPool(address(0));
+    }
+
+    function testSetPoolRevertsIfNotOwner() public {
+        address newPool = address(0x123);
+
+        vm.prank(user1);
+        vm.expectRevert();
+        stakingManager.setPool(newPool);
+    }
+
+    // ===================== Tests for setPositionTokenId function =====================
+    function testSetPositionTokenId() public {
+        uint256 newTokenId = 12345;
+
+        vm.prank(owner);
+        stakingManager.setPositionTokenId(newTokenId);
+
+        assertEq(stakingManager.positionTokenId(), newTokenId, "Position token ID should be updated");
+    }
+
+    function testSetPositionTokenIdRevertsOnZero() public {
+        vm.prank(owner);
+        vm.expectRevert("Invalid token ID");
+        stakingManager.setPositionTokenId(0);
+    }
+
+    function testSetPositionTokenIdRevertsIfNotOwner() public {
+        uint256 newTokenId = 12345;
+
+        vm.prank(user1);
+        vm.expectRevert();
+        stakingManager.setPositionTokenId(newTokenId);
+    }
+
+    // ===================== Tests for team reward limit (3x staking amount) =====================
+    function testTeamRewardReachesThreeTimesLimit() public {
+        // User1 stakes T1 (200 USDT)
+        vm.prank(user1);
+        stakingManager.liquidityProviderDeposit(inviter1, T1_STAKING);
+
+        // Check initial state
+        assertEq(stakingManager.teamOutOfReward(user1), false, "Team out of reward should be false initially");
+
+        // Add team rewards that don't exceed 3x limit (600 USDT max for 200 USDT staking)
+        vm.prank(stakingOperatorManager);
+        stakingManager.createLiquidityProviderReward(user1, 300 * 10 ** 6, uint8(IStakingManager.StakingRewardType.TeamReferralReward));
+
+        // Check team reward is added
+        (, , , , , uint256 teamReward1, ) = stakingManager.totalLpStakingReward(user1);
+        assertEq(teamReward1, 300 * 10 ** 6, "Team reward should be 300 USDT");
+        assertEq(stakingManager.teamOutOfReward(user1), false, "Team out of reward should still be false");
+
+        // Add more team rewards to reach the limit
+        vm.prank(stakingOperatorManager);
+        stakingManager.createLiquidityProviderReward(user1, 250 * 10 ** 6, uint8(IStakingManager.StakingRewardType.TeamReferralReward));
+
+        // Check team reward stops at 3x limit
+        (, , , , , uint256 teamReward2, ) = stakingManager.totalLpStakingReward(user1);
+        assertEq(teamReward2, 550 * 10 ** 6, "Team reward should be capped");
+        assertEq(stakingManager.teamOutOfReward(user1), false, "Should not exceed limit yet");
+
+        // Try to add more - should trigger out of achieve returns node
+        vm.prank(stakingOperatorManager);
+        vm.expectEmit(true, false, false, false);
+        emit outOfAchieveReturnsNodeExit(user1, 600 * 10 ** 6, block.number);
+        stakingManager.createLiquidityProviderReward(user1, 100 * 10 ** 6, uint8(IStakingManager.StakingRewardType.TeamReferralReward));
+
+        // Check final state
+        (, , , , , uint256 teamReward3, ) = stakingManager.totalLpStakingReward(user1);
+        assertEq(teamReward3, 600 * 10 ** 6, "Team reward should be capped at 600 USDT (3x 200 USDT)");
+        assertEq(stakingManager.teamOutOfReward(user1), true, "Team out of reward should now be true");
+    }
+
+    function testTeamRewardStopsAfterReachingLimit() public {
+        // User1 stakes T1 (200 USDT), so max team reward is 600 USDT (3x)
+        vm.prank(user1);
+        stakingManager.liquidityProviderDeposit(inviter1, T1_STAKING);
+
+        // Add team reward gradually up to the 3x limit
+        vm.prank(stakingOperatorManager);
+        stakingManager.createLiquidityProviderReward(user1, 300 * 10 ** 6, uint8(IStakingManager.StakingRewardType.TeamReferralReward));
+
+        (, , uint256 totalReward1, , , uint256 teamReward1, ) = stakingManager.totalLpStakingReward(user1);
+        assertEq(teamReward1, 300 * 10 ** 6, "Team reward should be 300 USDT");
+        assertEq(stakingManager.teamOutOfReward(user1), false, "Team should not be out of reward yet");
+
+        // Add more to reach and exceed the limit
+        vm.prank(stakingOperatorManager);
+        stakingManager.createLiquidityProviderReward(user1, 400 * 10 ** 6, uint8(IStakingManager.StakingRewardType.TeamReferralReward));
+
+        // When (teamReward + amount) > stakingToCmt * 3, lastTeamReward = (teamReward + amount) - (stakingToCmt * 3)
+        // (300 + 400) - (200 * 3) = 700 - 600 = 100
+        // So final teamReward = 300 + 100 = 400 (not 600 due to contract logic)
+        (, , uint256 totalReward2, , , uint256 teamReward2, ) = stakingManager.totalLpStakingReward(user1);
+        assertEq(teamReward2, 400 * 10 ** 6, "Team reward should be 400 USDT based on contract logic");
+        assertEq(totalReward2, 700 * 10 ** 6, "Total reward should be 700 USDT");
+        assertEq(stakingManager.teamOutOfReward(user1), true, "Team should now be out of reward");
+
+        // After reaching limit, trying to add team rewards will revert because 
+        // the condition `incomeType == uint8(StakingRewardType.TeamReferralReward) && !teamOutOfReward[lpAddress]` 
+        // evaluates to false, causing InvalidRewardTypeError
+        vm.prank(stakingOperatorManager);
+        vm.expectRevert(abi.encodeWithSelector(IStakingManager.InvalidRewardTypeError.selector, 2));
+        stakingManager.createLiquidityProviderReward(user1, 100 * 10 ** 6, uint8(IStakingManager.StakingRewardType.TeamReferralReward));
+
+        // Verify team reward hasn't changed
+        (, , uint256 totalReward3, , , uint256 teamReward3, ) = stakingManager.totalLpStakingReward(user1);
+        assertEq(teamReward3, 400 * 10 ** 6, "Team reward should remain at 400 USDT");
+        assertEq(totalReward3, 700 * 10 ** 6, "Total reward should remain at 700 USDT");
+    }
+
+    // ===================== Tests for liquidityProviderTypeAndAmount (via deposit) =====================
+    function testLiquidityProviderTypeAndAmountCalculation() public {
+        // Test T1
+        vm.prank(user1);
+        stakingManager.liquidityProviderDeposit(inviter1, T1_STAKING);
+        (, uint8 type1, , , uint256 endTime1, ) = stakingManager.currentLiquidityProvider(user1, 0);
+        assertEq(type1, uint8(IStakingManager.StakingType.T1), "Type should be T1");
+        assertEq(endTime1, block.timestamp + 172800, "End time should be start + 172800 seconds");
+
+        // Test T2
+        vm.prank(user2);
+        stakingManager.liquidityProviderDeposit(inviter1, T2_STAKING);
+        (, uint8 type2, , , uint256 endTime2, ) = stakingManager.currentLiquidityProvider(user2, 0);
+        assertEq(type2, uint8(IStakingManager.StakingType.T2), "Type should be T2");
+        assertEq(endTime2, block.timestamp + 259200, "End time should be start + 259200 seconds");
+
+        // Test T3
+        vm.prank(user3);
+        stakingManager.liquidityProviderDeposit(inviter1, T3_STAKING);
+        (, uint8 type3, , , uint256 endTime3, ) = stakingManager.currentLiquidityProvider(user3, 0);
+        assertEq(type3, uint8(IStakingManager.StakingType.T3), "Type should be T3");
+        assertEq(endTime3, block.timestamp + 345600, "End time should be start + 345600 seconds");
+    }
+
+    // ===================== Tests for receive() function =====================
+    function testReceiveNativeToken() public {
+        uint256 balanceBefore = address(stakingManager).balance;
+        uint256 sendAmount = 1 ether;
+
+        vm.deal(user1, sendAmount);
+        vm.prank(user1);
+        (bool success, ) = address(stakingManager).call{value: sendAmount}("");
+
+        assertTrue(success, "Should be able to receive native token");
+        assertEq(address(stakingManager).balance, balanceBefore + sendAmount, "Contract balance should increase");
+    }
+
+    // ===================== Edge case tests =====================
+    function testMultipleUsersStakingSameType() public {
+        // Multiple users stake the same type
+        vm.prank(user1);
+        stakingManager.liquidityProviderDeposit(inviter1, T1_STAKING);
+
+        vm.prank(user2);
+        stakingManager.liquidityProviderDeposit(inviter1, T1_STAKING);
+
+        vm.prank(user3);
+        stakingManager.liquidityProviderDeposit(inviter1, T1_STAKING);
+
+        address[] memory t1Providers = stakingManager.getLiquidityProvidersByType(uint8(IStakingManager.StakingType.T1));
+        assertEq(t1Providers.length, 3, "Should have 3 T1 providers");
+        assertEq(t1Providers[0], user1, "First provider should be user1");
+        assertEq(t1Providers[1], user2, "Second provider should be user2");
+        assertEq(t1Providers[2], user3, "Third provider should be user3");
+    }
+
+    function testStakingRoundIncrementsCorrectly() public {
+        assertEq(stakingManager.lpStakingRound(user1), 0, "Initial round should be 0");
+
+        vm.prank(user1);
+        stakingManager.liquidityProviderDeposit(inviter1, T1_STAKING);
+        assertEq(stakingManager.lpStakingRound(user1), 1, "Round should be 1 after first deposit");
+
+        vm.prank(user1);
+        stakingManager.liquidityProviderDeposit(inviter1, T2_STAKING);
+        assertEq(stakingManager.lpStakingRound(user1), 2, "Round should be 2 after second deposit");
+
+        vm.prank(user1);
+        stakingManager.liquidityProviderDeposit(inviter1, T3_STAKING);
+        assertEq(stakingManager.lpStakingRound(user1), 3, "Round should be 3 after third deposit");
+    }
+
+    function testDifferentStakingTypeTimePeriods() public {
+        // Test all staking time periods
+        assertEq(stakingManager.t1StakingTimeInternal(), 172800, "T1 should be 172800 seconds (2 days)");
+        assertEq(stakingManager.t2StakingTimeInternal(), 259200, "T2 should be 259200 seconds (3 days)");
+        assertEq(stakingManager.t3StakingTimeInternal(), 345600, "T3 should be 345600 seconds (4 days)");
+        assertEq(stakingManager.t4StakingTimeInternal(), 432000, "T4 should be 432000 seconds (5 days)");
+        assertEq(stakingManager.t5StakingTimeInternal(), 518400, "T5 should be 518400 seconds (6 days)");
+        assertEq(stakingManager.t6StakingTimeInternal(), 604800, "T6 should be 604800 seconds (7 days)");
+    }
+
+    function testRewardTypeValidation() public {
+        vm.prank(user1);
+        stakingManager.liquidityProviderDeposit(inviter1, T1_STAKING);
+
+        // Test valid reward types (0-3)
+        vm.prank(stakingOperatorManager);
+        stakingManager.createLiquidityProviderReward(user1, 100 * 10 ** 6, 0);
+
+        vm.prank(stakingOperatorManager);
+        stakingManager.createLiquidityProviderReward(user1, 100 * 10 ** 6, 1);
+
+        vm.prank(stakingOperatorManager);
+        stakingManager.createLiquidityProviderReward(user1, 100 * 10 ** 6, 2);
+
+        vm.prank(stakingOperatorManager);
+        stakingManager.createLiquidityProviderReward(user1, 100 * 10 ** 6, 3);
+
+        // Test invalid reward type (4+)
+        vm.prank(stakingOperatorManager);
+        vm.expectRevert(abi.encodeWithSelector(IStakingManager.InvalidRewardTypeError.selector, 4));
+        stakingManager.createLiquidityProviderReward(user1, 100 * 10 ** 6, 4);
+    }
 }

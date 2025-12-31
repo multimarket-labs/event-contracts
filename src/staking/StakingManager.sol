@@ -15,7 +15,6 @@ import "../interfaces/staking/pancake/IPancakeV3SwapCallback.sol";
 import "../interfaces/staking/IEventFundingManager.sol";
 import "../utils/SwapHelper.sol";
 
-
 import { StakingManagerStorage } from "./StakingManagerStorage.sol";
 
 contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeable, StakingManagerStorage {
