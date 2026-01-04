@@ -9,18 +9,18 @@ abstract contract ChooseMeTokenStorage is IChooseMeToken{
 
     uint256 public _lpBurnedTokens;
 
-    address public daoRewardPool;
+    address public stakingManager;
 
     bool internal isAllocation;
 
     struct chooseMePool {
-        address  nodePool;                 // 底池(节点收入加池子)
-        address  daoRewardPool;            // dao 组织奖励
-        address  airdropPool;              // 空投
-        address  techRewardsPool;          // 技术
-        address  ecosystemPool;            // 生态合作
-        address  foundingStrategyPool;     // 资本战略
-        address  marketingDevelopmentPool; // 市场发展
+        address  nodePool;                 // Base pool (node income pool)
+        address  daoRewardPool;            // DAO organization rewards
+        address  airdropPool;              // Airdrop
+        address  techRewardsPool;          // Technical
+        address  ecosystemPool;            // Ecosystem collaboration
+        address  foundingStrategyPool;     // Capital strategy
+        address  marketingDevelopmentPool; // Marketing development
     }
 
     chooseMePool public cmPool;

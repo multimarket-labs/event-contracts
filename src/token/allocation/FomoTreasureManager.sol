@@ -17,7 +17,7 @@ contract FomoTreasureManager is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     /**
-     * @dev 接收原生代币（BNB）并记录到资金余额
+     * @dev Receive native tokens (BNB) and record to funding balance
      */
     receive() external payable {
         FundingBalance[NativeTokenAddress] += msg.value;
@@ -29,9 +29,9 @@ contract FomoTreasureManager is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     /**
-     * @dev 初始化 FOMO 财库管理器合约
-     * @param initialOwner 初始所有者地址
-     * @param _underlyingToken 底层代币地址（USDT）
+     * @dev Initialize the FOMO Treasure Manager contract
+     * @param initialOwner Initial owner address
+     * @param _underlyingToken Underlying token address (USDT)
      */
     function initialize(address initialOwner,address _underlyingToken) public initializer  {
         __Ownable_init(initialOwner);
@@ -39,22 +39,22 @@ contract FomoTreasureManager is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     /**
-     * @dev 暂停合约（仅所有者可调用）
+     * @dev Pause the contract (only owner can call)
      */
     function pause() external onlyOwner {
         _pause();
     }
 
     /**
-     * @dev 恢复合约（仅所有者可调用）
+     * @dev Unpause the contract (only owner can call)
      */
     function unpause() external onlyOwner {
         _unpause();
     }
 
     /**
-     * @dev 存入原生代币（BNB）到 FOMO 财库
-     * @return 是否成功
+     * @dev Deposit native tokens (BNB) to FOMO Treasury
+     * @return Whether the operation was successful
      */
     function deposit() external payable whenNotPaused returns (bool) {
         FundingBalance[NativeTokenAddress] += msg.value;
@@ -67,9 +67,9 @@ contract FomoTreasureManager is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     /**
-     * @dev 存入 ERC20 代币（USDT）到 FOMO 财库
-     * @param amount 要存入的代币数量
-     * @return 是否成功
+     * @dev Deposit ERC20 tokens (USDT) to FOMO Treasury
+     * @param amount Amount of tokens to deposit
+     * @return Whether the operation was successful
      */
     function depositErc20(uint256 amount) external whenNotPaused returns (bool) {
         IERC20(underlyingToken).safeTransferFrom(msg.sender, address(this), amount);
@@ -83,10 +83,10 @@ contract FomoTreasureManager is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     /**
-     * @dev 提取原生代币（BNB）
-     * @param withdrawAddress 接收地址
-     * @param amount 提取金额
-     * @return 是否成功
+     * @dev Withdraw native tokens (BNB)
+     * @param withdrawAddress Receiving address
+     * @param amount Withdrawal amount
+     * @return Whether the operation was successful
      */
     function withdraw(address payable withdrawAddress, uint256 amount) external payable whenNotPaused returns (bool) {
         require(address(this).balance >= amount, "FomoTreasureManager withdraw: insufficient native token balance in contract");
@@ -105,10 +105,10 @@ contract FomoTreasureManager is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     /**
-     * @dev 提取 ERC20 代币（USDT）
-     * @param recipient 接收人地址
-     * @param amount 提取金额
-     * @return 是否成功
+     * @dev Withdraw ERC20 tokens (USDT)
+     * @param recipient Recipient address
+     * @param amount Withdrawal amount
+     * @return Whether the operation was successful
      */
     function withdrawErc20(address recipient, uint256 amount) external whenNotPaused returns (bool){
         require(amount <= _tokenBalance(), "FomoTreasureManager: withdraw erc20 amount more token balance in this contracts");
@@ -127,8 +127,8 @@ contract FomoTreasureManager is Initializable, OwnableUpgradeable, PausableUpgra
 
     // ========= internal =========
     /**
-     * @dev 获取合约中的 ERC20 代币余额
-     * @return 合约中的代币余额
+     * @dev Get the ERC20 token balance in the contract
+     * @return Token balance in the contract
      */
     function _tokenBalance() internal view virtual returns (uint256) {
         return IERC20(underlyingToken).balanceOf(address(this));

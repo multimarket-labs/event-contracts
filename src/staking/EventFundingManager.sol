@@ -17,14 +17,14 @@ contract EventFundingManager is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     /**
-     * @dev 接收原生代币（BNB）
+     * @dev Receive native tokens (BNB)
      */
     receive() external payable {}
 
     /**
-     * @dev 初始化事件资金管理器合约
-     * @param initialOwner 初始所有者地址
-     * @param _usdtTokenAddress USDT 代币地址
+     * @dev Initialize the Event Funding Manager contract
+     * @param initialOwner Initial owner address
+     * @param _usdtTokenAddress USDT token address
      */
     function initialize(address initialOwner, address _usdtTokenAddress) public initializer  {
         __Ownable_init(initialOwner);
@@ -32,9 +32,9 @@ contract EventFundingManager is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     /**
-     * @dev 存入 USDT 到事件资金池
-     * @param amount 要存入的 USDT 金额
-     * @return 是否成功
+     * @dev Deposit USDT to the event funding pool
+     * @param amount Amount of USDT to deposit
+     * @return Whether the operation was successful
      */
     function depositUsdt(uint256 amount) external whenNotPaused returns (bool) {
         IERC20(usdtTokenAddress).safeTransferFrom(msg.sender, address(this), amount);
@@ -48,9 +48,9 @@ contract EventFundingManager is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     /**
-     * @dev 使用资金投注事件
-     * @param event_pool 事件池地址
-     * @param amount 投注金额
+     * @dev Use funds to bet on event
+     * @param event_pool Event pool address
+     * @param amount Betting amount
      */
     function bettingEvent(address event_pool, uint256 amount) external {
         require(fundingBalanceForBetting[msg.sender][usdtTokenAddress] >= 0, "amount is zero");

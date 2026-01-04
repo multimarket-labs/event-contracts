@@ -8,9 +8,8 @@ import "@openzeppelin-upgrades/contracts/access/OwnableUpgradeable.sol";
 
 import "./ChooseMeTokenStorage.sol";
 
-
 contract ChooseMeToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, OwnableUpgradeable, ChooseMeTokenStorage {
-    event SetDaoRewardPool(address indexed daoRewardPool);
+    event SetStakingManager(address indexed stakingManager);
     event SetPoolAddress(chooseMePool indexed pool);
 
     string private constant NAME = "ChooseMe Coin";
@@ -20,54 +19,48 @@ contract ChooseMeToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradea
         _disableInitializers();
     }
 
-    modifier onlyDaoRewardPool() {
+    modifier onlyStakingManager() {
         require(
-            msg.sender == daoRewardPool,
-            "ChooseMeToken onlyDaoRewardPool: Only DaoRewardPool can call this function"
+            msg.sender == stakingManager, "ChooseMeToken onlyStakingManager: Only StakingManager can call this function"
         );
         _;
     }
 
     /**
-     * @dev 初始化 ChooseMe 代币合约
-     * @param _owner 所有者地址
-     * @param _daoRewardPool DAO 奖励池地址
+     * @dev Initialize the ChooseMe token contract
+     * @param _owner Owner address
+     * @param _daoRewardPool DAO reward pool address
      */
-    function initialize(
-        address _owner,
-        address _daoRewardPool
-    ) public initializer {
-        require(
-            _owner != address(0),
-            "ChooseMeToken initialize: _owner can't be zero address"
-        );
+    function initialize(address _owner, address _stakingManager) public initializer {
+        require(_owner != address(0), "ChooseMeToken initialize: _owner can't be zero address");
         __ERC20_init(NAME, SYMBOL);
         __ERC20Burnable_init();
         __Ownable_init(_owner);
         _transferOwnership(_owner);
-        daoRewardPool = _daoRewardPool;
+        stakingManager = _stakingManager;
+        emit SetStakingManager(_stakingManager);
     }
 
     /**
-     * @dev 返回代币精度
-     * @return 代币精度（6 位小数）
+     * @dev Returns token decimals
+     * @return Token decimals (6 decimal places)
      */
     function decimals() public view virtual override returns (uint8) {
         return 6;
     }
 
     /**
-     * @dev 获取指定地址的 CMT 余额
-     * @param _address 要查询的地址
-     * @return 该地址的 CMT 余额
+     * @dev Get CMT balance of specified address
+     * @param _address Address to query
+     * @return CMT balance of the address
      */
     function cmtBalance(address _address) external view returns (uint256) {
         return balanceOf(_address);
     }
 
     /**
-     * @dev 设置 DAO 奖励池地址
-     * @param _daoRewardPool DAO 奖励池地址
+     * @dev Set DAO reward pool address
+     * @param _daoRewardPool DAO reward pool address
      */
     function setDaoRewardPool(address _daoRewardPool) external onlyOwner {
         daoRewardPool = _daoRewardPool;
@@ -75,8 +68,8 @@ contract ChooseMeToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradea
     }
 
     /**
-     * @dev 设置所有池地址
-     * @param _pool 包含所有池地址的结构体
+     * @dev Set all pool addresses
+     * @param _pool Struct containing all pool addresses
      */
     function setPoolAddress(chooseMePool memory _pool) external onlyOwner {
         _beforeAllocation();
@@ -86,14 +79,14 @@ contract ChooseMeToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradea
     }
 
     /**
-     * @dev 执行代币池分配，按照预定比例向各个池铸造代币
-     * @notice 只能执行一次，分配比例：节点池20%, DAO奖励60%, 空投6%, 技术奖励5%, 生态系统4%, 创始策略2%, 市场开发3%
+     * @dev Execute token pool allocation, minting tokens to each pool according to predefined ratios
+     * @notice Can only be executed once. Allocation ratios: Node Pool 20%, DAO Reward 60%, Airdrop 6%, Tech Rewards 5%, Ecosystem 4%, Founding Strategy 2%, Marketing Development 3%
      */
     function poolAllocate() external onlyOwner {
         _beforeAllocation();
         _mint(cmPool.nodePool, (MaxTotalSupply * 2) / 10); // 20% of total supply
         _mint(cmPool.daoRewardPool, (MaxTotalSupply * 6) / 10); // 60% of total supply
-        _mint(cmPool.airdropPool, (MaxTotalSupply * 6 )/ 100); // 6% of total supply
+        _mint(cmPool.airdropPool, (MaxTotalSupply * 6) / 100); // 6% of total supply
         _mint(cmPool.techRewardsPool, (MaxTotalSupply * 5) / 100); // 5% of total supply
         _mint(cmPool.ecosystemPool, (MaxTotalSupply * 4) / 100); // 4% of total supply
         _mint(cmPool.foundingStrategyPool, (MaxTotalSupply * 2) / 100); // 2% of total supply
@@ -102,19 +95,19 @@ contract ChooseMeToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradea
     }
 
     /**
-     * @dev 销毁指定用户的代币（仅 DAO 奖励池可调用）
-     * @param user 要销毁代币的用户地址
-     * @param _amount 要销毁的代币数量
+     * @dev Burn tokens of specified user (only callable by DAO reward pool)
+     * @param user User address whose tokens to burn
+     * @param _amount Amount of tokens to burn
      */
-    function burn(address user, uint256 _amount) external onlyDaoRewardPool {
+    function burn(address user, uint256 _amount) external onlyStakingManager {
         _burn(user, _amount);
         _lpBurnedTokens += _amount;
         emit Burn(_amount, totalSupply());
     }
 
     /**
-     * @dev 获取 CMT 代币的当前总供应量
-     * @return 当前总供应量
+     * @dev Get current total supply of CMT tokens
+     * @return Current total supply
      */
     function CmtTotalSupply() external view returns (uint256) {
         return totalSupply();
@@ -122,39 +115,28 @@ contract ChooseMeToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradea
 
     // ==================== internal function =============================
     /**
-     * @dev 分配前的检查，确保只分配一次
+     * @dev Pre-allocation check, ensures allocation happens only once
      */
     function _beforeAllocation() internal virtual {
-        require(
-            !isAllocation,
-            "ChooseMeToken _beforeAllocation:Fishcake is already allocate"
-        );
+        require(!isAllocation, "ChooseMeToken _beforeAllocation:Fishcake is already allocate");
     }
 
     /**
-     * @dev 设置池地址前的验证，确保所有池地址已设置
-     * @param _pool 要验证的池地址结构体
+     * @dev Validation before setting pool addresses, ensures all pool addresses are set
+     * @param _pool Pool address struct to validate
      */
     function _beforePoolAddress(chooseMePool memory _pool) internal virtual {
+        require(_pool.nodePool != address(0), "ChooseMeToken _beforeAllocation:Missing allocate bottomPool address");
         require(
-            _pool.nodePool != address(0),
-            "ChooseMeToken _beforeAllocation:Missing allocate bottomPool address"
+            _pool.daoRewardPool != address(0), "ChooseMeToken _beforeAllocation:Missing allocate daoRewardPool address"
         );
-        require(
-            _pool.daoRewardPool != address(0),
-            "ChooseMeToken _beforeAllocation:Missing allocate daoRewardPool address"
-        );
-        require(
-            _pool.airdropPool != address(0),
-            "ChooseMeToken _beforeAllocation:Missing allocate airdropPool address"
-        );
+        require(_pool.airdropPool != address(0), "ChooseMeToken _beforeAllocation:Missing allocate airdropPool address");
         require(
             _pool.techRewardsPool != address(0),
             "ChooseMeToken _beforeAllocation:Missing allocate techRewardsPool address"
         );
         require(
-            _pool.ecosystemPool != address(0),
-            "ChooseMeToken _beforeAllocation:Missing allocate EcosystemPool address"
+            _pool.ecosystemPool != address(0), "ChooseMeToken _beforeAllocation:Missing allocate EcosystemPool address"
         );
         require(
             _pool.foundingStrategyPool != address(0),

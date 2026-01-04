@@ -32,13 +32,13 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     }
 
     /**
-     * @dev 初始化合约
-     * @param initialOwner 初始所有者地址
-     * @param _daoRewardManager DAO 奖励管理合约地址
-     * @param _underlyingToken 底层代币地址
-     * @param _usdt usdt
-     * @param _distributeRewardAddress 奖励分发管理地址
-     * @param _eventFundingManager 事件资金管理合约地址
+     * @dev Initialize the contract
+     * @param initialOwner Initial owner address
+     * @param _daoRewardManager DAO reward manager contract address
+     * @param _underlyingToken Underlying token address
+     * @param _usdt USDT address
+     * @param _distributeRewardAddress Reward distribution manager address
+     * @param _eventFundingManager Event funding manager contract address
      */
     function initialize(
         address initialOwner,
@@ -57,8 +57,8 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     }
 
     /**
-     * @dev 设置交易池地址
-     * @param _pool Pancake V3 交易池地址
+     * @dev Set trading pool address
+     * @param _pool Pancake V3 trading pool address
      */
     function setPool(address _pool) external onlyOwner {
         require(_pool != address(0), "Invalid pool address");
@@ -66,8 +66,8 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     }
 
     /**
-     * @dev 设置流动性仓位 NFT ID
-     * @param _tokenId Pancake V3 流动性仓位的 NFT Token ID
+     * @dev Set liquidity position NFT ID
+     * @param _tokenId NFT Token ID of Pancake V3 liquidity position
      */
     function setPositionTokenId(uint256 _tokenId) external onlyOwner {
         require(_tokenId > 0, "Invalid token ID");
@@ -75,8 +75,8 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     }
 
     /**
-     * @dev 购买节点-用户端
-     * @param amount 购买节点所需的代币数量，必须匹配分布式节点或集群节点的价格
+     * @dev Purchase node - User side
+     * @param amount Token amount required to purchase node, must match distributed node or cluster node price
      */
     function purchaseNode(uint256 amount) external {
         if (nodeBuyerInfo[msg.sender].amount > 0) {
@@ -95,10 +95,10 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     }
 
     /**
-     * @dev 分发节点奖励（仅奖励分发管理器可调用）
-     * @param recipient 接收奖励的地址
-     * @param amount 奖励金额
-     * @param incomeType 收益类型（0-节点收益, 1-推广收益）
+     * @dev Distribute node rewards (only reward distribution manager can call)
+     * @param recipient Address receiving the reward
+     * @param amount Reward amount
+     * @param incomeType Income type (0 - node income, 1 - promotion income)
      */
     function distributeRewards(address recipient, uint256 amount, uint8 incomeType)
         external
@@ -114,9 +114,9 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     }
 
     /**
-     * @dev 领取节点奖励-用户端
-     * @param incomeType 收益类型（0-节点收益, 1-推广收益）
-     * @notice 20% 的奖励将被强制扣留并转换为 USDT 存入事件预测市场
+     * @dev Claim node rewards - User side
+     * @param incomeType Income type (0 - node income, 1 - promotion income)
+     * @notice 20% of rewards will be forcibly withheld and converted to USDT for deposit into event prediction market
      */
     function claimReward(uint8 incomeType) external {
         require(incomeType <= uint256(NodeIncomeType.PromoteProfit), "Invalid income type");
@@ -140,9 +140,9 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     }
 
     /**
-     * @dev 添加流动性到 Pancake V3 池（仅所有者可调用）
-     * @param amount 要添加的 USDT 总量
-     * @notice 将 50% 的 USDT 兑换为底层代币，然后添加流动性
+     * @dev Add liquidity to Pancake V3 pool (only owner can call)
+     * @param amount Total amount of USDT to add
+     * @notice Convert 50% of USDT to underlying token, then add liquidity
      */
     function addLiquidity(uint256 amount) external onlyOwner {
         require(pool != address(0), "Pool not set");
@@ -187,10 +187,10 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     }
 
     /**
-     * @dev Pancake V3 交换回调函数
-     * @param amount0Delta token0 的变化量
-     * @param amount1Delta token1 的变化量
-     * @param data 回调数据
+     * @dev Pancake V3 swap callback function
+     * @param amount0Delta Change amount of token0
+     * @param amount1Delta Change amount of token1
+     * @param data Callback data
      */
     function pancakeV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
         require(msg.sender == pool, "Invalid callback caller");
@@ -198,9 +198,9 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     }
 
     /**
-     * @dev 根据金额匹配节点类型
-     * @param amount 购买金额
-     * @return 节点类型（0-分布式节点, 1-集群节点）
+     * @dev Match node type by amount
+     * @param amount Purchase amount
+     * @return Node type (0 - distributed node, 1 - cluster node)
      */
     function matchNodeTypeByAmount(uint256 amount) internal view returns (uint8) {
         uint8 buyNodeType;
