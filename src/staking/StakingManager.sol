@@ -90,7 +90,11 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
             revert InvalidAmountError(amount);
         }
 
-        inviteRelationShip[msg.sender] = myInviter;
+        if(inviteRelationShip[msg.sender] == address(0) && myInviter != address(0) && myInviter != msg.sender){
+            inviteRelationShip[msg.sender] = myInviter;
+        }
+        require(amount >= userCurrentLiquidityProvider[msg.sender], "StakingManager.liquidityProviderDeposit: amount should more than previous staking amount");
+        userCurrentLiquidityProvider[msg.sender] = amount;
 
         IERC20(underlyingToken).safeTransferFrom(msg.sender, address(this), amount);
 
