@@ -46,5 +46,7 @@ abstract contract StakingManagerStorage is IStakingManager {
     mapping(address => address) public inviteRelationShip;
     mapping(address => bool) public teamOutOfReward;
 
+    mapping(address => uint) public userCurrentLiquidityProvider;
+
     uint256[100] private __gap;
 }

@@ -29,7 +29,7 @@ contract ChooseMeToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradea
     /**
      * @dev Initialize the ChooseMe token contract
      * @param _owner Owner address
-     * @param _daoRewardPool DAO reward pool address
+     * @param _stakingManager Staking manager address
      */
     function initialize(address _owner, address _stakingManager) public initializer {
         require(_owner != address(0), "ChooseMeToken initialize: _owner can't be zero address");
@@ -60,11 +60,11 @@ contract ChooseMeToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradea
 
     /**
      * @dev Set DAO reward pool address
-     * @param _daoRewardPool DAO reward pool address
+     * @param _stakingManager 质押
      */
-    function setDaoRewardPool(address _daoRewardPool) external onlyOwner {
-        daoRewardPool = _daoRewardPool;
-        emit SetDaoRewardPool(_daoRewardPool);
+    function setDaoRewardPool(address _stakingManager) external onlyOwner {
+        stakingManager = _stakingManager;
+        emit SetStakingManager(_stakingManager);
     }
 
     /**
