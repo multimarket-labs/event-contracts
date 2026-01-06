@@ -118,10 +118,10 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      * @param incomeType Income type (0 - node income, 1 - promotion income)
      * @notice 20% of rewards will be forcibly withheld and converted to USDT for deposit into event prediction market
      */
-    function claimReward(uint8 incomeType) external {
+    function claimReward(uint8 incomeType, uint rewardAmount) external {
         require(incomeType <= uint256(NodeIncomeType.PromoteProfit), "Invalid income type");
-        uint256 rewardAmount = nodeRewardTypeInfo[msg.sender][incomeType].amount;
-        nodeRewardTypeInfo[msg.sender][incomeType].amount = 0;
+        require(nodeRewardTypeInfo[msg.sender][incomeType].amount >= rewardAmount, "Insufficient reward amount");
+        nodeRewardTypeInfo[msg.sender][incomeType].amount -= rewardAmount;
 
         uint256 toEventPredictionAmount = (rewardAmount * 20) / 100;
 
