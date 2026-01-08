@@ -52,6 +52,7 @@ interface IStakingManager {
 
     event LiquidityProviderDeposits(
         address indexed tokenAddress,
+        uint8   indexed stakingType,
         address indexed liquidityProvider,
         uint256 amount,
         uint256 startTime,

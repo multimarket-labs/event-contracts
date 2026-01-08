@@ -128,7 +128,7 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
 
         lpStakingRound[msg.sender] += 1;
 
-        emit LiquidityProviderDeposits(USDT, msg.sender, amount, block.timestamp, endStakingTime);
+        emit LiquidityProviderDeposits(USDT, stakingType, msg.sender, amount, block.timestamp, endStakingTime);
     }
 
     /**
