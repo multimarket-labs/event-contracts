@@ -84,10 +84,10 @@ interface IStakingManager {
     );
 
     event LiquidityAdded (
-        uint256 indexed tokenId,
-        uint128 liquidity,
-        uint256 amount0,
-        uint256 amount1
+        address indexed pair,
+        uint256 liquidity,
+        uint256 amountA,
+        uint256 amountB
     );
 
     event TokensBurned (

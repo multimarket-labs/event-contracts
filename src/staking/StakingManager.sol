@@ -9,17 +9,14 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "../interfaces/token/IDaoRewardManager.sol";
 import "../interfaces/token/IChooseMeToken.sol";
-import "../interfaces/staking/pancake/IPancakeV3Pool.sol";
-import "../interfaces/staking/pancake/IV3NonfungiblePositionManager.sol";
-import "../interfaces/staking/pancake/IPancakeV3SwapCallback.sol";
 import "../interfaces/staking/IEventFundingManager.sol";
-import "../utils/SwapHelper.sol";
+import "../utils/SwapV2Helper.sol";
 
 import {StakingManagerStorage} from "./StakingManagerStorage.sol";
 
 contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeable, StakingManagerStorage {
     using SafeERC20 for IERC20;
-    using SwapHelper for *;
+    using SwapV2Helper for *;
 
     constructor() {
         _disableInitializers();
@@ -226,7 +223,7 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
             daoRewardManager.withdraw(address(this), toEventPredictionAmount);
 
             uint256 usdtAmount =
-                SwapHelper.swapTokenToUsdt(pool, underlyingToken, USDT, toEventPredictionAmount, address(this));
+                SwapV2Helper.swapTokenToUsdt(underlyingToken, USDT, toEventPredictionAmount, address(this));
 
             IERC20(USDT).approve(address(eventFundingManager), usdtAmount);
             eventFundingManager.depositUsdt(usdtAmount);
@@ -244,51 +241,28 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
     }
 
     /**
-     * @dev Add liquidity to Pancake V3 pool
+     * @dev Add liquidity to PancakeSwap V2 pool
      * @param amount Total amount of USDT to add
-     * @notice Convert 50% of USDT to underlying token, then add liquidity
+     * @notice Convert 50% of USDT to underlying token, then add liquidity to V2
      */
     function addLiquidity(uint256 amount) external onlyStakingOperatorManager {
-        require(pool != address(0), "Pool not set");
         require(amount > 0, "Amount must be greater than 0");
-        require(positionTokenId > 0, "Position token not initialized");
 
         uint256 swapAmount = amount / 2;
         uint256 remainingAmount = amount - swapAmount;
 
-        IERC20(USDT).approve(POSITION_MANAGER, amount);
         uint256 underlyingTokenReceived =
-            SwapHelper.swapUsdtToToken(pool, USDT, underlyingToken, swapAmount, address(this));
+            SwapV2Helper.swapUsdtToToken(USDT, underlyingToken, swapAmount, address(this));
 
-        uint256 underlyingTokenBalance = underlyingTokenReceived;
-        uint256 usdtBalance = remainingAmount;
+        (uint256 amountA, uint256 amountB, uint256 liquidity) = SwapV2Helper.addLiquidity(
+            underlyingToken, USDT, underlyingTokenReceived,
+            remainingAmount, 0, 0, address(this)
+        );
 
-        IERC20(underlyingToken).approve(POSITION_MANAGER, underlyingTokenBalance);
+        // Get the pair address
+        address pair = SwapV2Helper.getPair(underlyingToken, USDT);
 
-        bool zeroForOne = USDT < underlyingToken;
-        uint256 amount0Desired;
-        uint256 amount1Desired;
-        if (zeroForOne) {
-            amount0Desired = usdtBalance;
-            amount1Desired = underlyingTokenBalance;
-        } else {
-            amount0Desired = underlyingTokenBalance;
-            amount1Desired = usdtBalance;
-        }
-
-        IV3NonfungiblePositionManager.IncreaseLiquidityParams memory params =
-            IV3NonfungiblePositionManager.IncreaseLiquidityParams({
-                tokenId: positionTokenId,
-                amount0Desired: amount0Desired,
-                amount1Desired: amount1Desired,
-                amount0Min: (amount0Desired * SLIPPAGE_TOLERANCE) / 100,
-                amount1Min: (amount1Desired * SLIPPAGE_TOLERANCE) / 100,
-                deadline: block.timestamp + 15 minutes
-            });
-        (uint128 liquidityAdded, uint256 amount0Used, uint256 amount1Used) =
-            IV3NonfungiblePositionManager(POSITION_MANAGER).increaseLiquidity(params);
-
-        emit LiquidityAdded(positionTokenId, liquidityAdded, amount0Used, amount1Used);
+        emit LiquidityAdded(pair, liquidity, amountA, amountB);
     }
 
     /**
@@ -296,8 +270,7 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
      * @param amount USDT amount to swap
      */
     function swapBurn(uint256 amount) external onlyStakingOperatorManager {
-        IERC20(USDT).approve(POSITION_MANAGER, amount);
-        uint256 underlyingTokenReceived = SwapHelper.swapUsdtToToken(pool, USDT, underlyingToken, amount, address(this));
+        uint256 underlyingTokenReceived = SwapV2Helper.swapUsdtToToken(USDT, underlyingToken, amount, address(this));
 
         require(underlyingTokenReceived > 0, "No tokens received from swap");
         IChooseMeToken(underlyingToken).burn(address(this), underlyingTokenReceived);
