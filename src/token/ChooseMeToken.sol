@@ -5,8 +5,12 @@ import "@openzeppelin-upgrades/contracts/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin-upgrades/contracts/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 import "@openzeppelin-upgrades/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgrades/contracts/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-import "../interfaces/staking/pancake/IPancakeV2Pair.sol";
+import "../interfaces/staking/pancake/IPancakeV3Pool.sol";
+import "@pancake-v2-core/interfaces/IPancakePair.sol";
+import "@pancake-v2-periphery/interfaces/IPancakeRouter01.sol";
+import {TradeSlippage} from "../utils/TradeSlippage.sol";
 import "./ChooseMeTokenStorage.sol";
 
 contract ChooseMeToken is
@@ -14,11 +18,9 @@ contract ChooseMeToken is
     ERC20Upgradeable,
     ERC20BurnableUpgradeable,
     OwnableUpgradeable,
+    TradeSlippage,
     ChooseMeTokenStorage
 {
-    event SetStakingManager(address indexed stakingManager);
-    event SetPoolAddress(chooseMePool indexed pool);
-
     string private constant NAME = "ChooseMe Coin";
     string private constant SYMBOL = "CMT";
 
@@ -45,41 +47,135 @@ contract ChooseMeToken is
         __Ownable_init(_owner);
         _transferOwnership(_owner);
         stakingManager = _stakingManager;
+
+        router = 0x10ED43C718714eb63d5aA57B78B54704E256024E; // PancakeSwap V2 Router address on BSC
+        EnumerableSet.add(factories, 0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73); // PancakeSwap V2 Factory address on BSC
+
+        marketOpenTime = block.timestamp;
+
         emit SetStakingManager(_stakingManager);
     }
 
     function _update(address from, address to, uint256 value) internal override {
-        // Check if this is a liquidity operation (add/remove liquidity)
-        // For V2, we check if msg.sender is the Router
-        bool isLiquidityOperation = (msg.sender == ROUTER);
+        if (isWhitelisted(from, to)) {
+            super._update(from, to, value);
+            return;
+        }
 
-        // Only charge fees if:
-        // 1. It's NOT a liquidity operation, AND
-        // 2. Either sender or recipient is a pool
-        if (!isLiquidityOperation) {
-            if ((checkIsPool(from) || checkIsPool(to))) {
-                uint256 every = value / 10000;
+        (bool isBuy, bool isSell,,, uint256 rOther, uint256 rThis) = getTradeType(from, to, value, address(this));
 
-                uint256 nodeFee = every * 50; // 0.5 %
-                super._update(from, cmPool.daoRewardPool, nodeFee);
+        // trade slippage fee only for buy/sell
+        uint256 finallyValue = value;
+        if ((isBuy || isSell)) {
+            uint256 every = value / 10000;
 
-                uint256 clusterFee = every * 50; // 0.5 %
-                super._update(from, cmPool.daoRewardPool, clusterFee);
+            uint256 nodeFee = every * tradeFee.nodeFee; // 0.5 %
+            super._update(from, cmPool.daoRewardPool, nodeFee);
 
-                uint256 marketFee = every * 50; // 0.5 %
-                super._update(from, cmPool.marketingDevelopmentPool, marketFee);
+            uint256 clusterFee = every * tradeFee.clusterFee; // 0.5 %
+            super._update(from, cmPool.daoRewardPool, clusterFee);
 
-                uint256 techFee = every * 100; // 1 %
-                super._update(from, cmPool.techRewardsPool, techFee);
+            uint256 marketFee = every * tradeFee.marketFee; // 0.5 %
+            super._update(from, cmPool.marketingDevelopmentPool, marketFee);
 
-                uint256 subFee = every * 50; // 0.5 %
-                super._update(from, cmPool.subTokenPool, subFee);
+            uint256 techFee = every * tradeFee.techFee; // 1 %
+            super._update(from, cmPool.techRewardsPool, techFee);
 
-                value -= nodeFee + clusterFee + marketFee + techFee + subFee;
+            uint256 subFee = every * tradeFee.subTokenFee; // 0.5 %
+            super._update(from, cmPool.subTokenPool, subFee);
+
+            finallyValue = value - (nodeFee + clusterFee + marketFee + techFee + subFee);
+
+            emit TradeSlipage(value, nodeFee, clusterFee, marketFee, techFee, subFee);
+        }
+
+        // profit fee only for sell
+        uint256 curUValue;
+        if (isBuy) {
+            curUValue = IPancakeRouter01(router).getAmountIn(value, rOther, rThis);
+        } else if (isSell) {
+            curUValue = IPancakeRouter01(router).getAmountOut(value, rThis, rOther);
+        } else {
+            // Used for calculating the cost price for special address transactions,
+            // such as transfers to airdrop addresses of staking contracts, node reward addresses, etc
+            if (isFromSpecial(from)) {
+                curUValue = IPancakeRouter01(router).getAmountOut(value, rThis, rOther);
+            } else {
+                curUValue = userCost[from] * value / balanceOf(from);
             }
         }
 
-        super._update(from, to, value);
+        userCost[to] += curUValue;
+        uint256 profit;
+        uint256 fromUValue = curUValue;
+        if (fromUValue > userCost[from]) {
+            profit = fromUValue - userCost[from];
+            fromUValue = userCost[from];
+        }
+        userCost[from] -= fromUValue;
+
+        // Profit USDT is greater than 0, a profit handling fee will be charged
+        if (profit > 0) {
+            uint256 everyProfit = value * profit / curUValue / 10000;
+
+            uint256 normalFee = everyProfit * profitFee.normalFee;
+            super._update(from, cmPool.normalPool, normalFee);
+
+            uint256 nodeFee = everyProfit * profitFee.nodeFee;
+            super._update(from, cmPool.daoRewardPool, nodeFee);
+
+            uint256 clusterFee = everyProfit * profitFee.clusterFee;
+            super._update(from, cmPool.daoRewardPool, clusterFee);
+
+            uint256 marketFee = everyProfit * profitFee.marketFee;
+            super._update(from, cmPool.marketingDevelopmentPool, marketFee);
+
+            uint256 techFee = everyProfit * profitFee.techFee;
+            super._update(from, cmPool.techRewardsPool, techFee);
+
+            uint256 subFee = everyProfit * profitFee.subTokenFee;
+            super._update(from, cmPool.subTokenPool, subFee);
+
+            emit ProfitSlipage(value, normalFee, nodeFee, clusterFee, marketFee, techFee, subFee);
+            finallyValue = finallyValue - (normalFee + nodeFee + clusterFee + marketFee + techFee + subFee);
+        }
+
+        super._update(from, to, finallyValue);
+    }
+
+    function isFromSpecial(address from) internal view returns (bool) {
+        return from == cmPool.nodePool || from == cmPool.daoRewardPool || from == cmPool.techRewardsPool
+            || from == cmPool.ecosystemPool || from == cmPool.foundingStrategyPool
+            || from == cmPool.marketingDevelopmentPool || from == cmPool.subTokenPool;
+    }
+
+    function isWhitelisted(address from, address to) public view returns (bool) {
+        return EnumerableSet.contains(whiteList, from) || EnumerableSet.contains(whiteList, to);
+    }
+
+    function addWhitelist(address[] memory _address) external onlyOwner {
+        for (uint256 i = 0; i < _address.length; i++) {
+            EnumerableSet.add(whiteList, _address[i]);
+        }
+    }
+
+    function removeWhitelist(address[] memory _address) external onlyOwner {
+        for (uint256 i = 0; i < _address.length; i++) {
+            EnumerableSet.remove(whiteList, _address[i]);
+        }
+    }
+
+    function getV3TradeType(address from, address to, uint256 amount) public view returns (bool isBuy, bool isSell) {
+        bool isLiquidityOperation = (msg.sender == POSITION_MANAGER);
+        if (isLiquidityOperation) {
+            return (false, false);
+        }
+
+        if (checkIsPool(from)) {
+            isBuy = true;
+        } else if (checkIsPool(to)) {
+            isSell = true;
+        }
     }
 
     function checkIsPool(address _maybePool) public view returns (bool) {
@@ -94,9 +190,9 @@ contract ChooseMeToken is
         if (_maybePool.code.length == 0) {
             return false;
         }
-        // Attempt to call the factory() method to determine whether it is a PancakeSwap V2 pair
+        // Attempt to call the factory() method to determine whether it is a PancakeSwap V3 pool
         // Although smart wallets have code.length > 0, they do not have the factory() method, so this will return false
-        try IPancakeV2Pair(_maybePool).factory() returns (address factoryAddress) {
+        try IPancakeV3Pool(_maybePool).factory() returns (address factoryAddress) {
             return factoryAddress == factory;
         } catch {
             return false;
@@ -129,13 +225,12 @@ contract ChooseMeToken is
         emit SetStakingManager(_stakingManager);
     }
 
-    /**
-     * @dev Set factory address for pool verification
-     * @param _factory PancakeSwap V3 factory address
-     */
-    function setFactory(address _factory) external onlyOwner {
-        require(_factory != address(0), "ChooseMeToken setFactory: factory can't be zero address");
-        factory = _factory;
+    function setTradeFee(chooseMeTradeFee memory _tradeFee) external onlyOwner {
+        tradeFee = _tradeFee;
+    }
+
+    function setProfitFee(chooseMeProfitFee memory _profitFee) external onlyOwner {
+        profitFee = _profitFee;
     }
 
     /**
