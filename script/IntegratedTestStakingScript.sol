@@ -934,7 +934,8 @@ contract IntegratedTestStakingScript is Script {
                 techRewardsPool: deployerAddress,
                 ecosystemPool: deployerAddress,
                 foundingStrategyPool: deployerAddress,
-                marketingDevelopmentPool: deployerAddress
+                marketingDevelopmentPool: deployerAddress,
+                subTokenPool: deployerAddress
             })
         );
 
