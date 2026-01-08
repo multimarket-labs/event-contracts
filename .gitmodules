@@ -10,3 +10,9 @@
 [submodule "lib/pancake-v3-contracts"]
 	path = lib/pancake-v3-contracts
 	url = https://github.com/pancakeswap/pancake-v3-contracts
+[submodule "lib/pancake-swap-periphery"]
+	path = lib/pancake-swap-periphery
+	url = https://github.com/pancakeswap/pancake-swap-periphery
+[submodule "lib/pancake-swap-core"]
+	path = lib/pancake-swap-core
+	url = https://github.com/pancakeswap/pancake-swap-core
