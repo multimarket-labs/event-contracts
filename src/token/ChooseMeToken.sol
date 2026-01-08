@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin-upgrades/contracts/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin-upgrades/contracts/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
@@ -95,9 +95,8 @@ contract ChooseMeToken is
         if (_maybePool.code.length == 0) {
             return false;
         }
-
-        // 尝试调用 factory() 方法判断是否为 PancakeSwap V3 池子
-        // 智能钱包虽然 code.length > 0，但不会有 factory() 方法，这里会返回 false
+        // Attempt to call the factory() method to determine whether it is a PancakeSwap V3 pool
+        // Although smart wallets have code.length > 0, they do not have the factory() method, so this will return false
         try IPancakeV3Pool(_maybePool).factory() returns (address factoryAddress) {
             return factoryAddress == factory;
         } catch {
@@ -124,7 +123,7 @@ contract ChooseMeToken is
 
     /**
      * @dev Set DAO reward pool address
-     * @param _stakingManager 质押
+     * @param _stakingManager
      */
     function setStakingManager(address _stakingManager) external onlyOwner {
         stakingManager = _stakingManager;
