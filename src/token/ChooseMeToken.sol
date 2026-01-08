@@ -6,9 +6,16 @@ import "@openzeppelin-upgrades/contracts/token/ERC20/extensions/ERC20BurnableUpg
 import "@openzeppelin-upgrades/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgrades/contracts/access/OwnableUpgradeable.sol";
 
+import "../interfaces/staking/pancake/IPancakeV3Pool.sol";
 import "./ChooseMeTokenStorage.sol";
 
-contract ChooseMeToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, OwnableUpgradeable, ChooseMeTokenStorage {
+contract ChooseMeToken is
+    Initializable,
+    ERC20Upgradeable,
+    ERC20BurnableUpgradeable,
+    OwnableUpgradeable,
+    ChooseMeTokenStorage
+{
     event SetStakingManager(address indexed stakingManager);
     event SetPoolAddress(chooseMePool indexed pool);
 
@@ -41,6 +48,63 @@ contract ChooseMeToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradea
         emit SetStakingManager(_stakingManager);
     }
 
+    function _update(address from, address to, uint256 value) internal override {
+        // Check if this is a liquidity operation (add/remove liquidity)
+        // When adding/removing liquidity, msg.sender is the Position Manager, not the pool
+        // We should NOT charge fees for liquidity operations
+        bool isLiquidityOperation = (msg.sender == POSITION_MANAGER);
+
+        // Only charge fees if:
+        // 1. It's NOT a liquidity operation, AND
+        // 2. Either sender or recipient is a pool
+        if (!isLiquidityOperation) {
+            if ((checkIsPool(from) || checkIsPool(to))) {
+                uint256 every = value / 10000;
+
+                uint256 nodeFee = every * 50; // 0.5 %
+                super._update(from, cmPool.daoRewardPool, nodeFee);
+
+                uint256 clusterFee = every * 50; // 0.5 %
+                super._update(from, cmPool.daoRewardPool, clusterFee);
+
+                uint256 marketFee = every * 50; // 0.5 %
+                super._update(from, cmPool.marketingDevelopmentPool, marketFee);
+
+                uint256 techFee = every * 100; // 1 %
+                super._update(from, cmPool.techRewardsPool, techFee);
+
+                uint256 subFee = every * 50; // 0.5 %
+                super._update(from, cmPool.subTokenPool, subFee);
+
+                value -= nodeFee + clusterFee + marketFee + techFee + subFee;
+            }
+        }
+
+        super._update(from, to, value);
+    }
+
+    function checkIsPool(address _maybePool) public view returns (bool) {
+        try this._checkIsPool(_maybePool) returns (bool isPool) {
+            return isPool;
+        } catch {
+            return false;
+        }
+    }
+
+    function _checkIsPool(address _maybePool) public view returns (bool) {
+        if (_maybePool.code.length == 0) {
+            return false;
+        }
+
+        // 尝试调用 factory() 方法判断是否为 PancakeSwap V3 池子
+        // 智能钱包虽然 code.length > 0，但不会有 factory() 方法，这里会返回 false
+        try IPancakeV3Pool(_maybePool).factory() returns (address factoryAddress) {
+            return factoryAddress == factory;
+        } catch {
+            return false;
+        }
+    }
+
     /**
      * @dev Returns token decimals
      * @return Token decimals (6 decimal places)
@@ -65,6 +129,15 @@ contract ChooseMeToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradea
     function setStakingManager(address _stakingManager) external onlyOwner {
         stakingManager = _stakingManager;
         emit SetStakingManager(_stakingManager);
+    }
+
+    /**
+     * @dev Set factory address for pool verification
+     * @param _factory PancakeSwap V3 factory address
+     */
+    function setFactory(address _factory) external onlyOwner {
+        require(_factory != address(0), "ChooseMeToken setFactory: factory can't be zero address");
+        factory = _factory;
     }
 
     /**

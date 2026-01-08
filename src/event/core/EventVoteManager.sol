@@ -91,7 +91,8 @@ contract EventVoteManager is
 
         // If approved, publish event to EventManager
         if (approved) {
-            IEventManager(eventManager).publishEvent(voteData.eventId);
+            // TODO :add publish event logic
+            // IEventManager(eventManager).publishEvent(voteData.eventId);
         }
     }
 

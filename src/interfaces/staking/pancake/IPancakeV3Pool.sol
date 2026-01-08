@@ -4,6 +4,10 @@ pragma solidity ^0.8.0;
 /// @title IPancakeV3Pool
 /// @notice Interface for the PancakeV3Pool contract
 interface IPancakeV3Pool {
+    /// @notice The contract that deployed the pool, which must adhere to the IPancakeV3Factory interface
+    /// @return The contract address
+    function factory() external view returns (address);
+
     /// @notice The first of the two tokens of the pool, sorted by address
     /// @return The token contract address
     function token0() external view returns (address);

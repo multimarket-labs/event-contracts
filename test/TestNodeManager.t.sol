@@ -240,7 +240,7 @@ contract NodeManagerTest is Test {
     function testClaimRewardRevertsOnInvalidIncomeType() public {
         vm.prank(user1);
         vm.expectRevert("Invalid income type");
-        nodeManager.claimReward(6);
+        nodeManager.claimReward(6,200000);
     }
 
     function testMultipleUsersPurchaseAndClaimRewards() public {
