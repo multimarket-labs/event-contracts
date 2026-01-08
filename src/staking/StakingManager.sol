@@ -292,17 +292,6 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
     }
 
     /**
-     * @dev Pancake V3 swap callback function
-     * @param amount0Delta Change amount of token0
-     * @param amount1Delta Change amount of token1
-     * @param data Callback data
-     */
-    function pancakeV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
-        require(msg.sender == pool, "Invalid callback caller");
-        SwapHelper.handleSwapCallback(pool, amount0Delta, amount1Delta, msg.sender);
-    }
-
-    /**
      * @dev Swap USDT for underlying token and burn
      * @param amount USDT amount to swap
      */

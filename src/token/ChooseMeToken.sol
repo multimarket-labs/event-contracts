@@ -6,7 +6,7 @@ import "@openzeppelin-upgrades/contracts/token/ERC20/extensions/ERC20BurnableUpg
 import "@openzeppelin-upgrades/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgrades/contracts/access/OwnableUpgradeable.sol";
 
-import "../interfaces/staking/pancake/IPancakeV3Pool.sol";
+import "../interfaces/staking/pancake/IPancakeV2Pair.sol";
 import "./ChooseMeTokenStorage.sol";
 
 contract ChooseMeToken is
@@ -50,9 +50,8 @@ contract ChooseMeToken is
 
     function _update(address from, address to, uint256 value) internal override {
         // Check if this is a liquidity operation (add/remove liquidity)
-        // When adding/removing liquidity, msg.sender is the Position Manager, not the pool
-        // We should NOT charge fees for liquidity operations
-        bool isLiquidityOperation = (msg.sender == POSITION_MANAGER);
+        // For V2, we check if msg.sender is the Router
+        bool isLiquidityOperation = (msg.sender == ROUTER);
 
         // Only charge fees if:
         // 1. It's NOT a liquidity operation, AND
@@ -95,9 +94,9 @@ contract ChooseMeToken is
         if (_maybePool.code.length == 0) {
             return false;
         }
-        // Attempt to call the factory() method to determine whether it is a PancakeSwap V3 pool
+        // Attempt to call the factory() method to determine whether it is a PancakeSwap V2 pair
         // Although smart wallets have code.length > 0, they do not have the factory() method, so this will return false
-        try IPancakeV3Pool(_maybePool).factory() returns (address factoryAddress) {
+        try IPancakeV2Pair(_maybePool).factory() returns (address factoryAddress) {
             return factoryAddress == factory;
         } catch {
             return false;
@@ -123,7 +122,7 @@ contract ChooseMeToken is
 
     /**
      * @dev Set DAO reward pool address
-     * @param _stakingManager
+     * @param _stakingManager Staking manager address
      */
     function setStakingManager(address _stakingManager) external onlyOwner {
         stakingManager = _stakingManager;

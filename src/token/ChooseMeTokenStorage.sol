@@ -6,8 +6,9 @@ import "../interfaces/token/IChooseMeToken.sol";
 
 abstract contract ChooseMeTokenStorage is IChooseMeToken{
     uint256 public constant MaxTotalSupply = 1_000_000_000 * 10 ** 6;
-    
-    address public constant POSITION_MANAGER = 0x46A15B0b27311cedF172AB29E4f4766fbE7F4364;
+
+    // PancakeSwap V2 Router address on BSC
+    address public constant ROUTER = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
 
     uint256 public _lpBurnedTokens;
 
