@@ -193,7 +193,7 @@ contract TestChooseMeTokenTrading is Script {
             techRewardsPool = makeAddr("techRewardsPool");
             marketingDevelopmentPool = makeAddr("marketingDevelopmentPool");
 
-            ChooseMeTokenStorage.chooseMePool memory pool = ChooseMeTokenStorage.chooseMePool({
+            ChooseMeTokenStorage.ChooseMePool memory pool = ChooseMeTokenStorage.ChooseMePool({
                 nodePool: nodePool,
                 daoRewardPool: makeAddr("daoRewardPool"),
                 normalPool: deployerAddress,

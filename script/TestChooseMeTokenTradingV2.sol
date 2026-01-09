@@ -231,7 +231,7 @@ contract TestChooseMeTokenTradingV2 is Script {
             normalPool = makeAddr("normalPool");
             subTokenPool = makeAddr("subTokenPool");
 
-            ChooseMeTokenStorage.chooseMePool memory pool = ChooseMeTokenStorage.chooseMePool({
+            ChooseMeTokenStorage.ChooseMePool memory pool = ChooseMeTokenStorage.ChooseMePool({
                 nodePool: nodePool,
                 daoRewardPool: daoRewardPool,
                 normalPool: normalPool,

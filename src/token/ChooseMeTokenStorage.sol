@@ -19,7 +19,7 @@ abstract contract ChooseMeTokenStorage is IChooseMeToken {
 
     bool internal isAllocation;
 
-    struct chooseMePool {
+    struct ChooseMePool {
         address normalPool; // Base pool (node income pool)
         address nodePool; // Base pool (node income pool)
         address daoRewardPool; // DAO organization rewards
@@ -31,7 +31,7 @@ abstract contract ChooseMeTokenStorage is IChooseMeToken {
         address subTokenPool; // Sub token liquidity pool
     }
 
-    chooseMePool public cmPool;
+    ChooseMePool public cmPool;
 
     struct ChooseMeTradeFee {
         uint16 nodeFee; // Node pool fee
@@ -56,7 +56,7 @@ abstract contract ChooseMeTokenStorage is IChooseMeToken {
 
     event Burn(uint256 _burnAmount, uint256 _totalSupply);
     event SetStakingManager(address indexed stakingManager);
-    event SetPoolAddress(chooseMePool indexed pool);
+    event SetPoolAddress(ChooseMePool indexed pool);
 
     event TradeSlipage(
         uint256 amount, uint256 nodeFee, uint256 clusterFee, uint256 marketFee, uint256 techFee, uint256 subFee

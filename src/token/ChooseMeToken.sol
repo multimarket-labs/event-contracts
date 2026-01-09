@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "../interfaces/staking/pancake/IPancakeV3Pool.sol";
 import "@pancake-v2-core/interfaces/IPancakePair.sol";
 import "@pancake-v2-core/interfaces/IPancakeFactory.sol";
-import "@pancake-v2-periphery/interfaces/IPancakeRouter01.sol";
+import "@pancake-v2-periphery/interfaces/IPancakeRouter02.sol";
 import {TradeSlippage} from "../utils/TradeSlippage.sol";
 import "./ChooseMeTokenStorage.sol";
 
@@ -264,7 +264,7 @@ contract ChooseMeToken is
      * @dev Set all pool addresses
      * @param _pool Struct containing all pool addresses
      */
-    function setPoolAddress(chooseMePool memory _pool) external onlyOwner {
+    function setPoolAddress(ChooseMePool memory _pool) external onlyOwner {
         _beforeAllocation();
         _beforePoolAddress(_pool);
         cmPool = _pool;
@@ -318,7 +318,7 @@ contract ChooseMeToken is
      * @dev Validation before setting pool addresses, ensures all pool addresses are set
      * @param _pool Pool address struct to validate
      */
-    function _beforePoolAddress(chooseMePool memory _pool) internal virtual {
+    function _beforePoolAddress(ChooseMePool memory _pool) internal virtual {
         require(_pool.nodePool != address(0), "ChooseMeToken _beforeAllocation:Missing allocate bottomPool address");
         require(
             _pool.daoRewardPool != address(0), "ChooseMeToken _beforeAllocation:Missing allocate daoRewardPool address"

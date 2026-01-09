@@ -84,9 +84,11 @@ interface IStakingManager {
         uint256  blockNumber
     );
 
+    // 1 pancake v2 liquidity; 2 pancake v3 liquidity ; 
     event LiquidityAdded (
+        uint8 indexed poolType,
         uint256 indexed tokenId,
-        uint128 liquidity,
+        uint256 liquidity,
         uint256 amount0,
         uint256 amount1
     );

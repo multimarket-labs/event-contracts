@@ -54,6 +54,7 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         USDT = _usdt;
         distributeRewardAddress = _distributeRewardAddress;
         eventFundingManager = IEventFundingManager(_eventFundingManager);
+        poolType = 1; // default pancake v2 liquidity
     }
 
     /**
@@ -63,6 +64,11 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     function setPool(address _pool) external onlyOwner {
         require(_pool != address(0), "Invalid pool address");
         pool = _pool;
+    }
+
+    function setPoolType(uint8 _poolType) external onlyOwner {
+        require(_poolType == 1 || _poolType == 2, "Invalid pool type");
+        poolType = _poolType;
     }
 
     /**
@@ -113,23 +119,30 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         emit DistributeNodeRewards({recipient: recipient, amount: amount, incomeType: incomeType});
     }
 
-    /**
-     * @dev Claim node rewards - User side
-     * @param incomeType Income type (0 - node income, 1 - promotion income)
-     * @notice 20% of rewards will be forcibly withheld and converted to USDT for deposit into event prediction market
-     */
-    function claimReward(uint8 incomeType, uint rewardAmount) external {
-        require(incomeType <= uint256(NodeIncomeType.PromoteProfit), "Invalid income type");
-        require(nodeRewardTypeInfo[msg.sender][incomeType].amount >= rewardAmount, "Insufficient reward amount");
-        nodeRewardTypeInfo[msg.sender][incomeType].amount -= rewardAmount;
+    function claimReward(uint256 nodeAmount, uint256 promotionAmount) external {
+        require(
+            nodeAmount == nodeRewardTypeInfo[msg.sender][0].amount
+                || promotionAmount == nodeRewardTypeInfo[msg.sender][0].amount,
+            "Claim amount mismatch"
+        );
+
+        uint256 rewardAmount = nodeRewardTypeInfo[msg.sender][0].amount + nodeRewardTypeInfo[msg.sender][1].amount;
+        nodeRewardTypeInfo[msg.sender][0].amount = 0;
+        nodeRewardTypeInfo[msg.sender][1].amount = 0;
+
+        require(rewardAmount > 0, "No rewards to claim");
 
         uint256 toEventPredictionAmount = (rewardAmount * 20) / 100;
 
         if (toEventPredictionAmount > 0) {
             daoRewardManager.withdraw(address(this), toEventPredictionAmount);
 
-            uint256 usdtAmount =
-                SwapHelper.swapTokenToUsdt(pool, underlyingToken, USDT, toEventPredictionAmount, address(this));
+            uint256 usdtAmount;
+            if (poolType == 1) {
+                usdtAmount = SwapHelper.swapV2(V2_ROUTER, underlyingToken, USDT, toEventPredictionAmount, address(this));
+            } else {
+                usdtAmount = SwapHelper.swapV3(pool, underlyingToken, USDT, toEventPredictionAmount, address(this));
+            }
 
             IERC20(USDT).approve(address(eventFundingManager), usdtAmount);
             eventFundingManager.depositUsdt(usdtAmount);
@@ -149,41 +162,18 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         require(amount > 0, "Amount must be greater than 0");
         require(positionTokenId > 0, "Position token not initialized");
 
-        uint256 swapAmount = amount / 2;
-        uint256 remainingAmount = amount - swapAmount;
-        IERC20(USDT).approve(POSITION_MANAGER, amount);
+        if (poolType == 1) {
+            (uint256 liquidityAdded, uint256 amount0Used, uint256 amount1Used) =
+                SwapHelper.addLiquidityV2(V2_ROUTER, USDT, underlyingToken, amount, address(this));
 
-        uint256 underlyingTokenReceived =
-            SwapHelper.swapUsdtToToken(pool, USDT, underlyingToken, swapAmount, address(this));
-
-        uint256 underlyingTokenBalance = underlyingTokenReceived;
-        uint256 usdtBalance = remainingAmount;
-
-        IERC20(underlyingToken).approve(POSITION_MANAGER, underlyingTokenBalance);
-        bool zeroForOne = USDT < underlyingToken;
-        uint256 amount0Desired;
-        uint256 amount1Desired;
-        if (zeroForOne) {
-            amount0Desired = usdtBalance;
-            amount1Desired = underlyingTokenBalance;
+            emit LiquidityAdded(1, 0, liquidityAdded, amount0Used, amount1Used);
         } else {
-            amount0Desired = underlyingTokenBalance;
-            amount1Desired = usdtBalance;
+            (uint256 liquidityAdded, uint256 amount0Used, uint256 amount1Used) = SwapHelper.addLiquidityV3(
+                POSITION_MANAGER, pool, positionTokenId, USDT, underlyingToken, amount, SLIPPAGE_TOLERANCE
+            );
+
+            emit LiquidityAdded(2, positionTokenId, liquidityAdded, amount0Used, amount1Used);
         }
-
-        IV3NonfungiblePositionManager.IncreaseLiquidityParams memory params =
-            IV3NonfungiblePositionManager.IncreaseLiquidityParams({
-                tokenId: positionTokenId,
-                amount0Desired: amount0Desired,
-                amount1Desired: amount1Desired,
-                amount0Min: (amount0Desired * SLIPPAGE_TOLERANCE) / 100,
-                amount1Min: (amount1Desired * SLIPPAGE_TOLERANCE) / 100,
-                deadline: block.timestamp + 15 minutes
-            });
-        (uint128 liquidityAdded, uint256 amount0Used, uint256 amount1Used) =
-            IV3NonfungiblePositionManager(POSITION_MANAGER).increaseLiquidity(params);
-
-        emit LiquidityAdded(positionTokenId, liquidityAdded, amount0Used, amount1Used);
     }
 
     /**
