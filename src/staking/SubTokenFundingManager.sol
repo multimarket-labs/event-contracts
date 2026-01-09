@@ -35,11 +35,13 @@ contract SubTokenFundingManager is
     /**
      * @dev Initialize the Sub Token Funding Manager contract
      * @param initialOwner Initial owner address
-     * @param _underlyingToken Underlying token address
+     * @param _usdt USDT token address
+     * @param _subToken Sub token address
      */
-    function initialize(address initialOwner, address _underlyingToken) public initializer {
+    function initialize(address initialOwner, address _usdt, address _subToken) public initializer {
         __Ownable_init(initialOwner);
-        underlyingToken = _underlyingToken;
+        USDT = _usdt;
+        subToken = _subToken;
     }
 
     /**
@@ -48,12 +50,10 @@ contract SubTokenFundingManager is
      */
     function addLiquidity(uint256 amount) external onlyOperatorManager {
         require(amount > 0, "Amount must be greater than 0");
-        require(amount <= IERC20(underlyingToken).balanceOf(address(this)), "Insufficient balance");
-
-        uint256 usdtAmount = SwapHelper.swapV2(V2_ROUTER, underlyingToken, USDT, amount, address(this));
+        require(amount <= IERC20(USDT).balanceOf(address(this)), "Insufficient balance");
 
         (uint256 liquidityAdded, uint256 amount0Used, uint256 amount1Used) =
-            SwapHelper.addLiquidityV2(V2_ROUTER, USDT, subToken, usdtAmount, address(this));
+            SwapHelper.addLiquidityV2(V2_ROUTER, USDT, subToken, amount, address(this));
 
         emit LiquidityAdded(liquidityAdded, amount0Used, amount1Used);
     }

@@ -11,14 +11,11 @@ import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 // forge test --match-contract NodeManagerTest -vvv
-// Mock ERC20 Token for testing
-contract MockERC20 is ERC20 {
-    constructor() ERC20("Mock Token", "MOCK") {
-        _mint(msg.sender, 1000000 * 10 ** 6);
-    }
 
-    function decimals() public pure override returns (uint8) {
-        return 6;
+// Mock USDT Token
+contract MockUSDT is ERC20 {
+    constructor() ERC20("Mock USDT", "USDT") {
+        _mint(msg.sender, 10000000 * 10 ** 18);
     }
 
     function mint(address to, uint256 amount) external {
@@ -26,518 +23,449 @@ contract MockERC20 is ERC20 {
     }
 }
 
-// Mock EventFundingManager for testing
-contract MockEventFundingManager {
-    function depositEventFunding(uint256 amount) external {}
+// Mock ChooseMeToken with quote functionality
+contract MockChooseMeToken is ERC20 {
+    uint256 public exchangeRate = 1; // 1:1 by default
+
+    constructor() ERC20("Mock ChooseMe Token", "MCMT") {
+        _mint(msg.sender, 10000000 * 10 ** 18);
+    }
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    function burn(address user, uint256 _amount) external {
+        _burn(user, _amount);
+    }
+
+    function quote(uint256 amount) external view returns (uint256) {
+        return amount * exchangeRate;
+    }
+
+    function setExchangeRate(uint256 rate) external {
+        exchangeRate = rate;
+    }
 }
 
-contract NodeManagerTest is Test {
+// Mock EventFundingManager
+contract MockEventFundingManager {
+    uint256 public totalDeposited;
+    address public lastDepositor;
+
+    function depositUsdt(uint256 amount) external returns (bool) {
+        totalDeposited += amount;
+        lastDepositor = msg.sender;
+        return true;
+    }
+}
+
+contract TestNodeManager is Test {
     NodeManager public nodeManager;
-    MockERC20 public mockToken;
     DaoRewardManager public daoRewardManager;
-    MockEventFundingManager public mockEventFundingManager;
+    MockUSDT public usdt;
+    MockChooseMeToken public chooseMeToken;
+    MockEventFundingManager public eventFundingManager;
 
     address public owner = address(0x01);
-    address public user1 = address(0x02);
-    address public user2 = address(0x03);
-    address public distributeRewardManager = address(0x04);
-    address public poolAddress = address(0x05);
+    address public distributeRewardAddress = address(0x02);
+    address public buyer1 = address(0x03);
+    address public buyer2 = address(0x04);
+    address public recipient = address(0x05);
 
     uint256 public constant DISTRIBUTED_NODE_PRICE = 500 * 10 ** 18;
     uint256 public constant CLUSTER_NODE_PRICE = 1000 * 10 ** 18;
 
     event PurchaseNodes(address indexed buyer, uint256 amount, uint8 nodeType);
-
     event DistributeNodeRewards(address indexed recipient, uint256 amount, uint8 incomeType);
+    event outOfAchieveReturnsNodeExit(address indexed recipient, uint256 totalReward, uint256 blockNumber);
+    event LiquidityAdded(uint256 liquidity, uint256 amount0, uint256 amount1);
 
     function setUp() public {
-        // Deploy mock contracts
-        mockToken = new MockERC20();
-        mockEventFundingManager = new MockEventFundingManager();
+        vm.startPrank(owner);
 
-        // Deploy DaoRewardManager with proxy
+        // Deploy mock tokens
+        usdt = new MockUSDT();
+        chooseMeToken = new MockChooseMeToken();
+        eventFundingManager = new MockEventFundingManager();
+
+        // Deploy NodeManager with proxy first
+        NodeManager logic = new NodeManager();
+        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(address(logic), owner, "");
+        nodeManager = NodeManager(payable(address(proxy)));
+
+        // Deploy DaoRewardManager with proxy (pass NodeManager address)
         DaoRewardManager daoLogic = new DaoRewardManager();
         TransparentUpgradeableProxy daoProxy = new TransparentUpgradeableProxy(address(daoLogic), owner, "");
         daoRewardManager = DaoRewardManager(payable(address(daoProxy)));
+        daoRewardManager.initialize(owner, address(chooseMeToken), address(nodeManager), distributeRewardAddress);
 
-        // Initialize DaoRewardManager (需要 4 个参数：owner, rewardToken, nodeManager, stakingManager)
-        // 先使用临时地址，后续会设置实际的 NodeManager
-        daoRewardManager.initialize(owner, address(mockToken), address(0x1), address(0x2));
-
-        // Mint reward tokens to DaoRewardManager
-        mockToken.mint(address(daoRewardManager), 1000000 * 10 ** 6);
-
-        // Deploy NodeManager with proxy
-        NodeManager logic = new NodeManager();
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(address(logic), owner, "");
-
-        nodeManager = NodeManager(address(proxy));
-
-        // Initialize NodeManager (需要 6 个参数：owner, daoRewardManager, underlyingToken, usdt, distributeRewardAddress, eventFundingManager)
+        // Initialize NodeManager
         nodeManager.initialize(
             owner,
             address(daoRewardManager),
-            address(mockToken),
-            address(mockToken), // usdt 参数，使用相同的 mockToken
-            distributeRewardManager,
-            address(mockEventFundingManager)
+            address(chooseMeToken),
+            address(usdt),
+            distributeRewardAddress,
+            address(eventFundingManager)
         );
 
-        // Set pool address
-        vm.prank(owner);
-        nodeManager.setPool(poolAddress);
+        // Setup tokens for testing
+        usdt.mint(buyer1, 10000 * 10 ** 18);
+        usdt.mint(buyer2, 10000 * 10 ** 18);
+        chooseMeToken.transfer(address(daoRewardManager), 1000000 * 10 ** 18);
 
-        // Mint tokens to users
-        mockToken.mint(user1, 10000 * 10 ** 18);
-        mockToken.mint(user2, 10000 * 10 ** 18);
+        vm.stopPrank();
 
-        // Approve NodeManager to spend user tokens
-        vm.prank(user1);
-        mockToken.approve(address(nodeManager), type(uint256).max);
-        vm.prank(user2);
-        mockToken.approve(address(nodeManager), type(uint256).max);
+        // Approve NodeManager to spend USDT
+        vm.prank(buyer1);
+        usdt.approve(address(nodeManager), type(uint256).max);
+
+        vm.prank(buyer2);
+        usdt.approve(address(nodeManager), type(uint256).max);
     }
 
-    function testPurchaseDistributedNode() public {
-        uint256 userBalanceBefore = mockToken.balanceOf(user1);
-        uint256 contractBalanceBefore = mockToken.balanceOf(address(nodeManager));
+    // ==================== Initialization Tests ====================
 
-        vm.prank(user1);
+    function testInitialization() public {
+        assertEq(nodeManager.owner(), owner, "Owner should be set correctly");
+        assertEq(address(nodeManager.daoRewardManager()), address(daoRewardManager), "DaoRewardManager should be set");
+        assertEq(nodeManager.underlyingToken(), address(chooseMeToken), "Underlying token should be chooseMeToken");
+        assertEq(nodeManager.USDT(), address(usdt), "USDT should be set correctly");
+        assertEq(
+            nodeManager.distributeRewardAddress(), distributeRewardAddress, "Distribute reward address should be set"
+        );
+        assertEq(
+            address(nodeManager.eventFundingManager()),
+            address(eventFundingManager),
+            "EventFundingManager should be set"
+        );
+    }
+
+    function testConstants() public {
+        assertEq(nodeManager.buyDistributedNode(), DISTRIBUTED_NODE_PRICE, "Distributed node price should be correct");
+        assertEq(nodeManager.buyClusterNode(), CLUSTER_NODE_PRICE, "Cluster node price should be correct");
+    }
+
+    // ==================== Purchase Node Tests ====================
+
+    function testPurchaseDistributedNode() public {
+        uint256 balanceBefore = usdt.balanceOf(buyer1);
+
+        vm.prank(buyer1);
         vm.expectEmit(true, false, false, true);
-        emit PurchaseNodes(user1, DISTRIBUTED_NODE_PRICE, uint8(INodeManager.NodeType.DistributedNode));
+        emit PurchaseNodes(buyer1, DISTRIBUTED_NODE_PRICE, 0);
         nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
 
-        // Check balances
-        assertEq(mockToken.balanceOf(user1), userBalanceBefore - DISTRIBUTED_NODE_PRICE);
-        assertEq(mockToken.balanceOf(address(nodeManager)), contractBalanceBefore + DISTRIBUTED_NODE_PRICE);
-
-        // Check buyer info
-        (address buyer, uint8 nodeType, uint256 amount) = nodeManager.nodeBuyerInfo(user1);
-        assertEq(buyer, user1);
-        assertEq(nodeType, uint8(INodeManager.NodeType.DistributedNode));
-        assertEq(amount, DISTRIBUTED_NODE_PRICE);
+        (address buyer, uint8 nodeType, uint256 amount) = nodeManager.nodeBuyerInfo(buyer1);
+        assertEq(buyer, buyer1, "Buyer should be buyer1");
+        assertEq(nodeType, 0, "Node type should be DistributedNode");
+        assertEq(amount, DISTRIBUTED_NODE_PRICE, "Amount should be distributed node price");
+        assertEq(usdt.balanceOf(buyer1), balanceBefore - DISTRIBUTED_NODE_PRICE, "USDT should be transferred");
+        assertEq(usdt.balanceOf(address(nodeManager)), DISTRIBUTED_NODE_PRICE, "NodeManager should receive USDT");
     }
 
     function testPurchaseClusterNode() public {
-        uint256 userBalanceBefore = mockToken.balanceOf(user1);
-        uint256 contractBalanceBefore = mockToken.balanceOf(address(nodeManager));
+        uint256 balanceBefore = usdt.balanceOf(buyer1);
 
-        vm.prank(user1);
+        vm.prank(buyer1);
         vm.expectEmit(true, false, false, true);
-        emit PurchaseNodes(user1, CLUSTER_NODE_PRICE, uint8(INodeManager.NodeType.ClusterNode));
+        emit PurchaseNodes(buyer1, CLUSTER_NODE_PRICE, 1);
         nodeManager.purchaseNode(CLUSTER_NODE_PRICE);
 
-        // Check balances
-        assertEq(mockToken.balanceOf(user1), userBalanceBefore - CLUSTER_NODE_PRICE);
-        assertEq(mockToken.balanceOf(address(nodeManager)), contractBalanceBefore + CLUSTER_NODE_PRICE);
-
-        // Check buyer info
-        (address buyer, uint8 nodeType, uint256 amount) = nodeManager.nodeBuyerInfo(user1);
-        assertEq(buyer, user1);
-        assertEq(nodeType, uint8(INodeManager.NodeType.ClusterNode));
-        assertEq(amount, CLUSTER_NODE_PRICE);
+        (address buyer, uint8 nodeType, uint256 amount) = nodeManager.nodeBuyerInfo(buyer1);
+        assertEq(buyer, buyer1, "Buyer should be buyer1");
+        assertEq(nodeType, 1, "Node type should be ClusterNode");
+        assertEq(amount, CLUSTER_NODE_PRICE, "Amount should be cluster node price");
+        assertEq(usdt.balanceOf(buyer1), balanceBefore - CLUSTER_NODE_PRICE, "USDT should be transferred");
     }
 
-    function testPurchaseNodeRevertsIfAlreadyBought() public {
-        vm.prank(user1);
-        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+    function testPurchaseNodeRevertsWithInvalidAmount() public {
+        uint256 invalidAmount = 300 * 10 ** 18;
 
-        vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(INodeManager.HaveAlreadyBuyNode.selector, user1));
-        nodeManager.purchaseNode(CLUSTER_NODE_PRICE);
-    }
-
-    function testPurchaseNodeRevertsOnInvalidAmount() public {
-        uint256 invalidAmount = 750 * 10 ** 6;
-
-        vm.prank(user1);
+        vm.prank(buyer1);
         vm.expectRevert(abi.encodeWithSelector(INodeManager.InvalidNodeTypeError.selector, invalidAmount));
         nodeManager.purchaseNode(invalidAmount);
     }
 
+    function testPurchaseNodeRevertsIfAlreadyPurchased() public {
+        vm.startPrank(buyer1);
+        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+
+        vm.expectRevert(abi.encodeWithSelector(INodeManager.HaveAlreadyBuyNode.selector, buyer1));
+        nodeManager.purchaseNode(CLUSTER_NODE_PRICE);
+        vm.stopPrank();
+    }
+
+    function testMultipleBuyersPurchaseNodes() public {
+        vm.prank(buyer1);
+        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+
+        vm.prank(buyer2);
+        nodeManager.purchaseNode(CLUSTER_NODE_PRICE);
+
+        (address buyer1Addr, uint8 nodeType1,) = nodeManager.nodeBuyerInfo(buyer1);
+        assertEq(buyer1Addr, buyer1, "Buyer1 should be recorded");
+        assertEq(nodeType1, 0, "Buyer1 should have DistributedNode");
+
+        (address buyer2Addr, uint8 nodeType2,) = nodeManager.nodeBuyerInfo(buyer2);
+        assertEq(buyer2Addr, buyer2, "Buyer2 should be recorded");
+        assertEq(nodeType2, 1, "Buyer2 should have ClusterNode");
+    }
+
+    // ==================== Distribute Rewards Tests ====================
+
     function testDistributeRewards() public {
-        vm.prank(distributeRewardManager);
+        // First purchase a node
+        vm.prank(buyer1);
+        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+
+        uint256 rewardAmount = 100 * 10 ** 18;
+        uint8 incomeType = 0; // NodeTypeProfit
+
+        vm.prank(distributeRewardAddress);
         vm.expectEmit(true, false, false, true);
-        emit DistributeNodeRewards(user1, 1000 * 10 ** 6, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-        nodeManager.distributeRewards(user1, 1000 * 10 ** 6, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
+        emit DistributeNodeRewards(buyer1, rewardAmount, incomeType);
+        nodeManager.distributeRewards(buyer1, rewardAmount, incomeType);
 
-        // Check reward info
-        (, uint256 amount,) = nodeManager.nodeRewardTypeInfo(user1, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-        assertEq(amount, 1000 * 10 ** 6);
+        (, uint256 amount,) = nodeManager.nodeRewardTypeInfo(buyer1, incomeType);
+        assertEq(amount, rewardAmount, "Reward amount should be recorded");
+
+        (uint256 totalReward,,) = nodeManager.rewardClaimInfo(buyer1);
+        assertEq(totalReward, rewardAmount, "Total reward should be updated");
     }
 
-    function testDistributeRewardsMultipleTimes() public {
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user1, 1000 * 10 ** 6, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
+    function testDistributeMultipleRewardTypes() public {
+        vm.prank(buyer1);
+        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
 
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user1, 500 * 10 ** 6, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
+        uint256 rewardAmount1 = 100 * 10 ** 18;
+        uint256 rewardAmount2 = 50 * 10 ** 18;
 
-        // Check accumulated reward
-        (, uint256 amount,) = nodeManager.nodeRewardTypeInfo(user1, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-        assertEq(amount, 1500 * 10 ** 6);
+        vm.startPrank(distributeRewardAddress);
+        nodeManager.distributeRewards(buyer1, rewardAmount1, 0); // NodeTypeProfit
+        nodeManager.distributeRewards(buyer1, rewardAmount2, 1); // TradeFeeProfit
+        vm.stopPrank();
+
+        (, uint256 amount1,) = nodeManager.nodeRewardTypeInfo(buyer1, 0);
+        (, uint256 amount2,) = nodeManager.nodeRewardTypeInfo(buyer1, 1);
+        assertEq(amount1, rewardAmount1, "First reward type should be recorded");
+        assertEq(amount2, rewardAmount2, "Second reward type should be recorded");
+
+        (uint256 totalReward,,) = nodeManager.rewardClaimInfo(buyer1);
+        assertEq(totalReward, rewardAmount1 + rewardAmount2, "Total reward should be sum of all rewards");
     }
 
-    function testDistributeRewardsRevertsOnZeroAddress() public {
-        vm.prank(distributeRewardManager);
+    function testDistributeRewardsRevertsWithZeroAddress() public {
+        vm.prank(distributeRewardAddress);
         vm.expectRevert("NodeManager.distributeRewards: zero address");
-        nodeManager.distributeRewards(address(0), 1000 * 10 ** 6, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
+        nodeManager.distributeRewards(address(0), 100 * 10 ** 18, 0);
     }
 
-    function testDistributeRewardsRevertsOnZeroAmount() public {
-        vm.prank(distributeRewardManager);
+    function testDistributeRewardsRevertsWithZeroAmount() public {
+        vm.prank(distributeRewardAddress);
         vm.expectRevert("NodeManager.distributeRewards: amount must more than zero");
-        nodeManager.distributeRewards(user1, 0, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
+        nodeManager.distributeRewards(buyer1, 0, 0);
     }
 
-    function testDistributeRewardsRevertsOnInvalidIncomeType() public {
-        vm.prank(distributeRewardManager);
+    function testDistributeRewardsRevertsWithInvalidIncomeType() public {
+        vm.prank(buyer1);
+        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+
+        vm.prank(distributeRewardAddress);
         vm.expectRevert("Invalid income type");
-        nodeManager.distributeRewards(user1, 1000 * 10 ** 6, 6);
+        nodeManager.distributeRewards(buyer1, 100 * 10 ** 18, 6); // Invalid type
     }
 
-    function testDistributeRewardsRevertsIfNotDistributeRewardManager() public {
-        vm.prank(user1);
+    function testDistributeRewardsRevertsWithUnauthorizedCaller() public {
+        vm.prank(buyer1);
+        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+
+        vm.prank(buyer2); // Not distributeRewardAddress
         vm.expectRevert("onlyDistributeRewardManager");
-        nodeManager.distributeRewards(user1, 1000 * 10 ** 6, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
+        nodeManager.distributeRewards(buyer1, 100 * 10 ** 18, 0);
     }
 
-    function testClaimReward() public {
-        // First distribute rewards
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user1, 1000 * 10 ** 6, uint8(INodeManager.NodeIncomeType.TradeFeeProfit));
-
-        // Check reward is distributed
-        (, uint256 amountBefore,) =
-            nodeManager.nodeRewardTypeInfo(user1, uint8(INodeManager.NodeIncomeType.TradeFeeProfit));
-        assertEq(amountBefore, 1000 * 10 ** 6, "Reward should be distributed");
-
-        // Note: claimReward function requires a real swap pool to execute,
-        // which is not available in this test environment.
-        // The claim functionality would need integration testing with a real pool contract.
-    }
-
-    function testClaimRewardWithMultipleIncomeTypes() public {
-        // Distribute different types of rewards
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user1, 1000 * 10 ** 6, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user1, 500 * 10 ** 6, uint8(INodeManager.NodeIncomeType.TradeFeeProfit));
-
-        // Check NodeTypeProfit is distributed
-        (, uint256 amount1,) = nodeManager.nodeRewardTypeInfo(user1, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-        assertEq(amount1, 1000 * 10 ** 6, "NodeTypeProfit should be distributed");
-
-        // Check TradeFeeProfit is also distributed
-        (, uint256 amount2,) = nodeManager.nodeRewardTypeInfo(user1, uint8(INodeManager.NodeIncomeType.TradeFeeProfit));
-        assertEq(amount2, 500 * 10 ** 6, "TradeFeeProfit should be distributed");
-
-        // Note: claimReward requires a real swap pool for execution
-        // Integration tests with a deployed pool would be needed to test claim functionality
-    }
-
-    function testClaimRewardRevertsOnInvalidIncomeType() public {
-        vm.prank(user1);
-        vm.expectRevert("Invalid income type");
-        nodeManager.claimReward(6,200000);
-    }
-
-    function testMultipleUsersPurchaseAndClaimRewards() public {
-        // User1 purchases distributed node
-        vm.prank(user1);
+    function testDistributeRewardsMarksNodeAsOutOfWhenExceedsThreeTimes() public {
+        vm.prank(buyer1);
         nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
 
-        // User2 purchases cluster node
-        vm.prank(user2);
-        nodeManager.purchaseNode(CLUSTER_NODE_PRICE);
-
-        // Distribute rewards to both users
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user1, 1000 * 10 ** 6, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user2, 2000 * 10 ** 6, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-
-        // Verify rewards are distributed correctly
-        (, uint256 user1Reward,) =
-            nodeManager.nodeRewardTypeInfo(user1, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-        assertEq(user1Reward, 1000 * 10 ** 6, "User1 should have correct reward");
-
-        (, uint256 user2Reward,) =
-            nodeManager.nodeRewardTypeInfo(user2, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-        assertEq(user2Reward, 2000 * 10 ** 6, "User2 should have correct reward");
-    }
-
-    function testGetNodeBuyerInfo() public {
-        vm.prank(user1);
-        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
-
-        (address buyer, uint8 nodeType, uint256 amount) = nodeManager.nodeBuyerInfo(user1);
-        assertEq(buyer, user1);
-        assertEq(nodeType, uint8(INodeManager.NodeType.DistributedNode));
-        assertEq(amount, DISTRIBUTED_NODE_PRICE);
-    }
-
-    function testGetNodeRewardTypeInfo() public {
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user1, 1000 * 10 ** 6, uint8(INodeManager.NodeIncomeType.ChildCoinProfit));
-
-        (, uint256 amount,) = nodeManager.nodeRewardTypeInfo(user1, uint8(INodeManager.NodeIncomeType.ChildCoinProfit));
-        assertEq(amount, 1000 * 10 ** 6);
-    }
-
-    function testAllIncomeTypes() public {
-        // Test all 5 income types
-        uint8[] memory incomeTypes = new uint8[](5);
-        incomeTypes[0] = uint8(INodeManager.NodeIncomeType.NodeTypeProfit);
-        incomeTypes[1] = uint8(INodeManager.NodeIncomeType.TradeFeeProfit);
-        incomeTypes[2] = uint8(INodeManager.NodeIncomeType.ChildCoinProfit);
-        incomeTypes[3] = uint8(INodeManager.NodeIncomeType.SecondTierMarketProfit);
-        incomeTypes[4] = uint8(INodeManager.NodeIncomeType.PromoteProfit);
-
-        // Distribute rewards for all income types
-        for (uint256 i = 0; i < incomeTypes.length; i++) {
-            vm.prank(distributeRewardManager);
-            nodeManager.distributeRewards(user1, (i + 1) * 100 * 10 ** 6, incomeTypes[i]);
-
-            (, uint256 amount,) = nodeManager.nodeRewardTypeInfo(user1, incomeTypes[i]);
-            assertEq(amount, (i + 1) * 100 * 10 ** 6, "Each income type should have correct reward amount");
-        }
-
-        // Verify all rewards are still present (claim would require real pool integration)
-        for (uint256 i = 0; i < incomeTypes.length; i++) {
-            (, uint256 amount,) = nodeManager.nodeRewardTypeInfo(user1, incomeTypes[i]);
-            assertEq(amount, (i + 1) * 100 * 10 ** 6, "Rewards should remain in place");
-        }
-    }
-
-    function testConstants() public {
-        assertEq(nodeManager.buyDistributedNode(), 500 * 10 ** 18);
-        assertEq(nodeManager.buyClusterNode(), 1000 * 10 ** 18);
-        assertEq(nodeManager.underlyingToken(), address(mockToken));
-        assertEq(nodeManager.distributeRewardAddress(), distributeRewardManager);
-    }
-
-    // ===================== Tests for setPool function =====================
-    function testSetPool() public {
-        address newPool = address(0x123);
-
+        // Set exchange rate so reward value exceeds 3x purchase amount
         vm.prank(owner);
-        nodeManager.setPool(newPool);
+        chooseMeToken.setExchangeRate(10);
 
-        assertEq(nodeManager.pool(), newPool, "Pool address should be updated");
-    }
+        // Distribute rewards that will exceed 3x when converted to USDT
+        uint256 rewardAmount = (DISTRIBUTED_NODE_PRICE * 3) / 10 + 1;
 
-    function testSetPoolRevertsOnZeroAddress() public {
-        vm.prank(owner);
-        vm.expectRevert("Invalid pool address");
-        nodeManager.setPool(address(0));
-    }
-
-    function testSetPoolRevertsIfNotOwner() public {
-        address newPool = address(0x123);
-
-        vm.prank(user1);
-        vm.expectRevert();
-        nodeManager.setPool(newPool);
-    }
-
-    // ===================== Tests for setPositionTokenId function =====================
-    function testSetPositionTokenId() public {
-        uint256 newTokenId = 12345;
-
-        vm.prank(owner);
-        nodeManager.setPositionTokenId(newTokenId);
-
-        assertEq(nodeManager.positionTokenId(), newTokenId, "Position token ID should be updated");
-    }
-
-    function testSetPositionTokenIdRevertsOnZero() public {
-        vm.prank(owner);
-        vm.expectRevert("Invalid token ID");
-        nodeManager.setPositionTokenId(0);
-    }
-
-    function testSetPositionTokenIdRevertsIfNotOwner() public {
-        uint256 newTokenId = 12345;
-
-        vm.prank(user1);
-        vm.expectRevert();
-        nodeManager.setPositionTokenId(newTokenId);
-    }
-
-    // ===================== Edge case and validation tests =====================
-    function testPurchaseNodeOnlyOnce() public {
-        // User can only purchase node once
-        vm.prank(user1);
-        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
-
-        // Check node purchase is recorded
-        (address buyer1, uint8 nodeType1, uint256 amount1) = nodeManager.nodeBuyerInfo(user1);
-        assertEq(buyer1, user1);
-        assertEq(amount1, DISTRIBUTED_NODE_PRICE);
-
-        // Try to purchase again should fail
-        vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(INodeManager.HaveAlreadyBuyNode.selector, user1));
-        nodeManager.purchaseNode(CLUSTER_NODE_PRICE);
-    }
-
-    function testDistributeRewardsAccumulation() public {
-        // Test that rewards accumulate correctly
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user1, 100 * 10 ** 6, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user1, 200 * 10 ** 6, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user1, 300 * 10 ** 6, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-
-        (, uint256 totalAmount,) =
-            nodeManager.nodeRewardTypeInfo(user1, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-        assertEq(totalAmount, 600 * 10 ** 6, "Rewards should accumulate correctly");
-    }
-
-    function testMultipleUsersCanPurchaseDifferentNodes() public {
-        // User1 purchases distributed node
-        vm.prank(user1);
-        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
-
-        // User2 purchases cluster node
-        vm.prank(user2);
-        nodeManager.purchaseNode(CLUSTER_NODE_PRICE);
-
-        // Check both purchases are recorded
-        (address buyer1, uint8 nodeType1, uint256 amount1) = nodeManager.nodeBuyerInfo(user1);
-        assertEq(buyer1, user1);
-        assertEq(nodeType1, uint8(INodeManager.NodeType.DistributedNode));
-        assertEq(amount1, DISTRIBUTED_NODE_PRICE);
-
-        (address buyer2, uint8 nodeType2, uint256 amount2) = nodeManager.nodeBuyerInfo(user2);
-        assertEq(buyer2, user2);
-        assertEq(nodeType2, uint8(INodeManager.NodeType.ClusterNode));
-        assertEq(amount2, CLUSTER_NODE_PRICE);
-    }
-
-    function testDistributeRewardsToMultipleUsersWithDifferentIncomeTypes() public {
-        // Distribute different income types to different users
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user1, 100 * 10 ** 6, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user1, 200 * 10 ** 6, uint8(INodeManager.NodeIncomeType.TradeFeeProfit));
-
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user2, 300 * 10 ** 6, uint8(INodeManager.NodeIncomeType.ChildCoinProfit));
-
-        vm.prank(distributeRewardManager);
-        nodeManager.distributeRewards(user2, 400 * 10 ** 6, uint8(INodeManager.NodeIncomeType.SecondTierMarketProfit));
-
-        // Verify user1 rewards
-        (, uint256 user1Amount1,) =
-            nodeManager.nodeRewardTypeInfo(user1, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-        assertEq(user1Amount1, 100 * 10 ** 6);
-
-        (, uint256 user1Amount2,) =
-            nodeManager.nodeRewardTypeInfo(user1, uint8(INodeManager.NodeIncomeType.TradeFeeProfit));
-        assertEq(user1Amount2, 200 * 10 ** 6);
-
-        // Verify user2 rewards
-        (, uint256 user2Amount1,) =
-            nodeManager.nodeRewardTypeInfo(user2, uint8(INodeManager.NodeIncomeType.ChildCoinProfit));
-        assertEq(user2Amount1, 300 * 10 ** 6);
-
-        (, uint256 user2Amount2,) =
-            nodeManager.nodeRewardTypeInfo(user2, uint8(INodeManager.NodeIncomeType.SecondTierMarketProfit));
-        assertEq(user2Amount2, 400 * 10 ** 6);
-    }
-
-    function testNodePriceConstants() public {
-        // Verify node prices are correctly set
-        assertEq(nodeManager.buyDistributedNode(), 500 * 10 ** 18, "Distributed node price should be 500 USDT");
-        assertEq(nodeManager.buyClusterNode(), 1000 * 10 ** 18, "Cluster node price should be 1000 USDT");
-    }
-
-    function testPurchaseNodeEmitsCorrectEvent() public {
-        vm.prank(user1);
+        vm.prank(distributeRewardAddress);
         vm.expectEmit(true, false, false, true);
-        emit PurchaseNodes(user1, DISTRIBUTED_NODE_PRICE, uint8(INodeManager.NodeType.DistributedNode));
-        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+        emit outOfAchieveReturnsNodeExit(buyer1, rewardAmount, block.number);
+        nodeManager.distributeRewards(buyer1, rewardAmount, 0);
+
+        (,, bool isOutOf) = nodeManager.rewardClaimInfo(buyer1);
+        assertTrue(isOutOf, "Node should be marked as out of rewards");
     }
 
-    function testDistributeRewardsEmitsCorrectEvent() public {
-        vm.prank(distributeRewardManager);
-        vm.expectEmit(true, false, false, true);
-        emit DistributeNodeRewards(user1, 1000 * 10 ** 6, uint8(INodeManager.NodeIncomeType.PromoteProfit));
-        nodeManager.distributeRewards(user1, 1000 * 10 ** 6, uint8(INodeManager.NodeIncomeType.PromoteProfit));
-    }
-
-    function testInitialRewardAmountIsZero() public {
-        // Before any rewards are distributed, amount should be 0
-        (, uint256 amount,) = nodeManager.nodeRewardTypeInfo(user1, uint8(INodeManager.NodeIncomeType.NodeTypeProfit));
-        assertEq(amount, 0, "Initial reward amount should be 0");
-    }
-
-    function testNodeBuyerInfoInitiallyEmpty() public {
-        // Before purchasing a node, buyer info should be empty
-        (address buyer, uint8 nodeType, uint256 amount) = nodeManager.nodeBuyerInfo(user1);
-        assertEq(buyer, address(0), "Initial buyer should be zero address");
-        assertEq(nodeType, 0, "Initial node type should be 0");
-        assertEq(amount, 0, "Initial amount should be 0");
-    }
-
-    function testValidNodeTypeDetection() public {
-        // Test distributed node detection
-        vm.prank(user1);
-        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
-        (, uint8 nodeType1,) = nodeManager.nodeBuyerInfo(user1);
-        assertEq(nodeType1, uint8(INodeManager.NodeType.DistributedNode), "Should detect distributed node");
-
-        // Test cluster node detection
-        vm.prank(user2);
-        nodeManager.purchaseNode(CLUSTER_NODE_PRICE);
-        (, uint8 nodeType2,) = nodeManager.nodeBuyerInfo(user2);
-        assertEq(nodeType2, uint8(INodeManager.NodeType.ClusterNode), "Should detect cluster node");
-    }
-
-    function testPurchaseNodeTransfersTokensCorrectly() public {
-        uint256 userBalanceBefore = mockToken.balanceOf(user1);
-        uint256 contractBalanceBefore = mockToken.balanceOf(address(nodeManager));
-
-        vm.prank(user1);
+    function testDistributeRewardsRevertsWhenNodeIsOutOf() public {
+        vm.prank(buyer1);
         nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
 
-        uint256 userBalanceAfter = mockToken.balanceOf(user1);
-        uint256 contractBalanceAfter = mockToken.balanceOf(address(nodeManager));
+        vm.prank(owner);
+        chooseMeToken.setExchangeRate(10);
 
-        assertEq(userBalanceAfter, userBalanceBefore - DISTRIBUTED_NODE_PRICE, "User balance should decrease");
-        assertEq(
-            contractBalanceAfter, contractBalanceBefore + DISTRIBUTED_NODE_PRICE, "Contract balance should increase"
+        uint256 rewardAmount = (DISTRIBUTED_NODE_PRICE * 3) / 10 + 1;
+
+        vm.startPrank(distributeRewardAddress);
+        nodeManager.distributeRewards(buyer1, rewardAmount, 0);
+
+        vm.expectRevert("Recipient is out of rewards");
+        nodeManager.distributeRewards(buyer1, 1 * 10 ** 18, 0);
+        vm.stopPrank();
+    }
+
+    // ==================== Claim Reward Tests ====================
+    // Note: These tests are skipped as they require DEX (PancakeSwap) integration
+    // They should be tested in integration tests with proper DEX infrastructure
+
+    function testClaimRewardBasic() public {
+        vm.skip(true); // Skip: requires PancakeSwap V2 Router for token swapping
+
+        // Setup: purchase node and distribute rewards
+        vm.prank(buyer1);
+        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+
+        uint256 rewardAmount = 100 * 10 ** 18;
+        vm.prank(distributeRewardAddress);
+        nodeManager.distributeRewards(buyer1, rewardAmount, 0);
+
+        // Claim 50% of rewards
+        uint256 claimAmount = 50 * 10 ** 18;
+        uint256 expectedToEventPrediction = (claimAmount * 20) / 100; // 20%
+        uint256 expectedToBuyer = claimAmount - expectedToEventPrediction; // 80%
+
+        uint256 buyer1BalanceBefore = chooseMeToken.balanceOf(buyer1);
+
+        vm.prank(buyer1);
+        nodeManager.claimReward(claimAmount);
+
+        (uint256 totalReward, uint256 claimedReward,) = nodeManager.rewardClaimInfo(buyer1);
+        assertEq(claimedReward, claimAmount, "Claimed reward should be recorded");
+        assertEq(chooseMeToken.balanceOf(buyer1), buyer1BalanceBefore + expectedToBuyer, "Buyer should receive 80%");
+    }
+
+    function testClaimRewardRevertsWhenAmountExceedsAvailable() public {
+        vm.prank(buyer1);
+        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+
+        uint256 rewardAmount = 100 * 10 ** 18;
+        vm.prank(distributeRewardAddress);
+        nodeManager.distributeRewards(buyer1, rewardAmount, 0);
+
+        vm.prank(buyer1);
+        vm.expectRevert("Claim amount mismatch");
+        nodeManager.claimReward(rewardAmount); // Trying to claim full or more amount should fail
+    }
+
+    function testClaimRewardMultipleTimes() public {
+        vm.skip(true); // Skip: requires PancakeSwap V2 Router for token swapping
+
+        vm.prank(buyer1);
+        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+
+        uint256 rewardAmount = 100 * 10 ** 18;
+        vm.prank(distributeRewardAddress);
+        nodeManager.distributeRewards(buyer1, rewardAmount, 0);
+
+        // Claim in two parts
+        uint256 claimAmount1 = 30 * 10 ** 18;
+        uint256 claimAmount2 = 20 * 10 ** 18;
+
+        vm.startPrank(buyer1);
+        nodeManager.claimReward(claimAmount1);
+        nodeManager.claimReward(claimAmount2);
+        vm.stopPrank();
+
+        (, uint256 claimedReward,) = nodeManager.rewardClaimInfo(buyer1);
+        assertEq(claimedReward, claimAmount1 + claimAmount2, "Total claimed should be sum of both claims");
+    }
+
+    // ==================== Owner Function Tests ====================
+
+    function testOnlyOwnerCanCallAddLiquidity() public {
+        vm.prank(buyer1);
+        vm.expectRevert();
+        nodeManager.addLiquidity(1000 * 10 ** 18);
+    }
+
+    // ==================== Edge Cases and Security Tests ====================
+
+    function testCannotReinitialize() public {
+        vm.prank(owner);
+        vm.expectRevert();
+        nodeManager.initialize(
+            owner,
+            address(daoRewardManager),
+            address(chooseMeToken),
+            address(usdt),
+            distributeRewardAddress,
+            address(eventFundingManager)
         );
     }
 
-    function testCannotPurchaseNodeWithoutApproval() public {
-        address user3 = address(0x06);
-        mockToken.mint(user3, 10000 * 10 ** 6);
+    function testNodePurchaseWithExactAmountRequired() public {
+        uint256 balanceBefore = usdt.balanceOf(address(nodeManager));
 
-        // Don't approve NodeManager
-
-        vm.prank(user3);
-        vm.expectRevert();
+        vm.prank(buyer1);
         nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+
+        assertEq(
+            usdt.balanceOf(address(nodeManager)) - balanceBefore,
+            DISTRIBUTED_NODE_PRICE,
+            "Exact amount should be transferred"
+        );
     }
 
-    function testCannotPurchaseNodeWithInsufficientBalance() public {
-        address user3 = address(0x06);
-        mockToken.mint(user3, 100 * 10 ** 6); // Only 100 USDT
-
-        vm.prank(user3);
-        mockToken.approve(address(nodeManager), type(uint256).max);
-
-        vm.prank(user3);
-        vm.expectRevert();
+    function testRewardClaimInfoTracking() public {
+        vm.prank(buyer1);
         nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+
+        vm.prank(distributeRewardAddress);
+        nodeManager.distributeRewards(buyer1, 100 * 10 ** 18, 0);
+
+        vm.prank(distributeRewardAddress);
+        nodeManager.distributeRewards(buyer1, 50 * 10 ** 18, 1);
+
+        (uint256 totalReward, uint256 claimedReward, bool isOutOf) = nodeManager.rewardClaimInfo(buyer1);
+        assertEq(totalReward, 150 * 10 ** 18, "Total reward should accumulate");
+        assertEq(claimedReward, 0, "Claimed reward should be 0 initially");
+        assertFalse(isOutOf, "Should not be out of rewards");
+    }
+
+    function testNodeTypeEnumMapping() public {
+        vm.prank(buyer1);
+        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+
+        (, uint8 nodeType,) = nodeManager.nodeBuyerInfo(buyer1);
+        assertEq(nodeType, uint8(INodeManager.NodeType.DistributedNode), "Should map to correct enum value");
+
+        vm.prank(buyer2);
+        nodeManager.purchaseNode(CLUSTER_NODE_PRICE);
+
+        (, uint8 nodeType2,) = nodeManager.nodeBuyerInfo(buyer2);
+        assertEq(nodeType2, uint8(INodeManager.NodeType.ClusterNode), "Should map to correct enum value");
+    }
+
+    function testAllIncomeTypes() public {
+        vm.prank(buyer1);
+        nodeManager.purchaseNode(DISTRIBUTED_NODE_PRICE);
+
+        vm.startPrank(distributeRewardAddress);
+        for (uint8 i = 0; i <= uint8(INodeManager.NodeIncomeType.PromoteProfit); i++) {
+            nodeManager.distributeRewards(buyer1, 10 * 10 ** 18, i);
+        }
+        vm.stopPrank();
+
+        (uint256 totalReward,,) = nodeManager.rewardClaimInfo(buyer1);
+        assertEq(totalReward, 50 * 10 ** 18, "Should accumulate all income types");
     }
 }

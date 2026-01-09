@@ -11,12 +11,19 @@ via_ir = true
 fs_permissions = [{ access = "read-write", path = "./" }]
 
 [lint]
-# lint_on_build = false
+lint_on_build = false
 severity = [
-  'high', 'med', 'low', 
+  'high',
+  'med',
+  'low',
   # 'info', 'gas', 'codesize'
 ]
-ignore = ['script/*', 'test/*']
+ignore = [
+  '**/script/**/*',
+  '**/test/**/*',
+  "**/lib/**/*",
+  # "**/src/**/*",
+]
 exclude_lints = [
   # "unaliased-plain-import",
 ]

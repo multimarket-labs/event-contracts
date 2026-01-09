@@ -15,65 +15,22 @@ abstract contract ChooseMeTokenStorage is IChooseMeToken {
 
     address public stakingManager;
 
-    bool internal isAllocation;
+    address public currencyDistributor;
 
-    struct ChooseMePool {
-        address normalPool; // Base pool (node income pool)
-        address nodePool; // Base pool (node income pool)
-        address daoRewardPool; // DAO organization rewards
-        address airdropPool; // Airdrop
-        address techRewardsPool; // Technical
-        address ecosystemPool; // Ecosystem collaboration
-        address foundingStrategyPool; // Capital strategy
-        address marketingDevelopmentPool; // Marketing development
-        address subTokenPool; // Sub token liquidity pool
-    }
+    bool internal isAllocation;
 
     ChooseMePool public cmPool;
 
-    struct ChooseMeTradeFee {
-        uint16 nodeFee; // Node pool fee
-        uint16 clusterFee; // Cluster pool fee
-        uint16 marketFee; // Market development fee
-        uint16 techFee; // Technical fee
-        uint16 subTokenFee; // Sub token liquidity fee
-    }
-
     ChooseMeTradeFee public tradeFee;
-
-    struct ChooseMeProfitFee {
-        uint16 normalFee; // Central fee
-        uint16 nodeFee; // Node pool fee
-        uint16 clusterFee; // Cluster pool fee
-        uint16 marketFee; // Market development fee
-        uint16 techFee; // Technical fee
-        uint16 subTokenFee; // Sub token liquidity fee
-    }
 
     ChooseMeProfitFee public profitFee;
 
-    event Burn(uint256 _burnAmount, uint256 _totalSupply);
-    event SetStakingManager(address indexed stakingManager);
-    event SetPoolAddress(ChooseMePool indexed pool);
-
-    event TradeSlipage(
-        uint256 amount, uint256 nodeFee, uint256 clusterFee, uint256 marketFee, uint256 techFee, uint256 subFee
-    );
-    event ProfitSlipage(
-        uint256 amount,
-        uint256 normalFee,
-        uint256 nodeFee,
-        uint256 clusterFee,
-        uint256 marketFee,
-        uint256 techFee,
-        uint256 subFee
-    );
-
     address public mainPair;
+    bool internal slippageLock;
 
-    uint256 public marketOpenTime;
+    mapping(address => uint256) public userCost;
 
-    mapping(address => uint256) public userCost; // user cost u amount
+    CumulativeSlipage public cumulativeSlipage;
 
     EnumerableSet.AddressSet whiteList;
 

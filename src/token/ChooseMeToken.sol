@@ -12,7 +12,23 @@ import "@pancake-v2-core/interfaces/IPancakePair.sol";
 import "@pancake-v2-core/interfaces/IPancakeFactory.sol";
 import "@pancake-v2-periphery/interfaces/IPancakeRouter02.sol";
 import {TradeSlippage} from "../utils/TradeSlippage.sol";
+import {SwapHelper} from "../utils/SwapHelper.sol";
 import "./ChooseMeTokenStorage.sol";
+
+contract CurrencyDistributor {
+    address owner;
+    address currency;
+
+    constructor(address _currency) {
+        owner = msg.sender;
+        currency = _currency;
+        ensure();
+    }
+
+    function ensure() public {
+        IERC20(currency).approve(owner, ~uint256(0));
+    }
+}
 
 contract ChooseMeToken is
     Initializable,
@@ -36,6 +52,13 @@ contract ChooseMeToken is
         _;
     }
 
+    modifier inSlippageLock() {
+        require(!slippageLock, "ChooseMeToken inSlippageLock: Reentrant call detected");
+        slippageLock = true;
+        _;
+        slippageLock = false;
+    }
+
     /**
      * @dev Initialize the ChooseMe token contract
      * @param _owner Owner address
@@ -50,30 +73,15 @@ contract ChooseMeToken is
         stakingManager = _stakingManager;
 
         USDT = _usdt;
+        currencyDistributor = address(new CurrencyDistributor(USDT));
 
         EnumerableSet.add(factories, V2_FACTORY); // PancakeSwap V2 Factory address on BSC
-
-        marketOpenTime = block.timestamp;
 
         mainPair = IPancakeFactory(V2_FACTORY).createPair(USDT, address(this));
         emit SetStakingManager(_stakingManager);
 
-        tradeFee = ChooseMeTradeFee({
-            nodeFee: 50, // 0.5 %
-            clusterFee: 50, // 0.5 %
-            marketFee: 50, // 0.5 %
-            techFee: 100, // 1 %
-            subTokenFee: 50 // 0.5 %
-        });
-
-        profitFee = ChooseMeProfitFee({
-            normalFee: 1600, // 16 %
-            nodeFee: 1000, // 10 %
-            clusterFee: 500, // 5 %
-            marketFee: 500, // 5 %
-            techFee: 500, // 5 %
-            subTokenFee: 500 // 5 %
-        });
+        tradeFee = ChooseMeTradeFee({nodeFee: 50, clusterFee: 50, marketFee: 50, techFee: 100, subTokenFee: 50});
+        profitFee = ChooseMeProfitFee({nodeFee: 800, clusterFee: 600, marketFee: 400, techFee: 400, subTokenFee: 400});
     }
 
     /**
@@ -85,41 +93,114 @@ contract ChooseMeToken is
      * @notice Applies profit fees when selling at profit: 16% normal, 10% node, 5% cluster, 5% marketing, 5% tech, 5% sub-token
      */
     function _update(address from, address to, uint256 value) internal override {
-        if (isWhitelisted(from, to) || !isAllocation) {
+        if (isWhitelisted(from, to) || !isAllocation || slippageLock) {
             super._update(from, to, value);
             return;
         }
 
         (bool isBuy, bool isSell,,,,) = getTradeType(from, to, value, address(this));
+        uint256 swapNodeFee;
+        uint256 swapClusterFee;
+        uint256 swapMarketFee;
+        uint256 swapTechFee;
+        uint256 swapSubFee;
 
         // trade slippage fee only for buy/sell
-        uint256 finallyValue = value;
         if (isBuy || isSell) {
             uint256 every = value / 10000;
 
-            uint256 nodeFee = every * tradeFee.nodeFee; // 0.5 %
-            super._update(from, cmPool.daoRewardPool, nodeFee);
+            swapNodeFee = every * tradeFee.nodeFee;
+            swapClusterFee = every * tradeFee.clusterFee;
+            swapMarketFee = every * tradeFee.marketFee;
+            swapTechFee = every * tradeFee.techFee;
+            swapSubFee = every * tradeFee.subTokenFee;
 
-            uint256 clusterFee = every * tradeFee.clusterFee; // 0.5 %
-            super._update(from, cmPool.daoRewardPool, clusterFee);
-
-            uint256 marketFee = every * tradeFee.marketFee; // 0.5 %
-            super._update(from, cmPool.marketingDevelopmentPool, marketFee);
-
-            uint256 techFee = every * tradeFee.techFee; // 1 %
-            super._update(from, cmPool.techRewardsPool, techFee);
-
-            uint256 subFee = every * tradeFee.subTokenFee; // 0.5 %
-            super._update(from, cmPool.subTokenPool, subFee);
-
-            finallyValue = value - (nodeFee + clusterFee + marketFee + techFee + subFee);
-
-            emit TradeSlipage(value, nodeFee, clusterFee, marketFee, techFee, subFee);
+            emit TradeSlipage(value, swapNodeFee, swapClusterFee, swapMarketFee, swapTechFee, swapSubFee);
         }
 
+        uint256 finallyValue = value - (swapNodeFee + swapClusterFee + swapMarketFee + swapTechFee + swapSubFee);
+
+        uint256 profitNodeFee;
+        uint256 profitClusterFee;
+        uint256 profitMarketFee;
+        uint256 profitTechFee;
+        uint256 profitSubFee;
         // profit fee only for sell
+        // Profit USDT is greater than 0, a profit handling fee will be charged
+        (uint256 curUValue, uint256 profit) = getProfit(from, to, finallyValue, isBuy, isSell);
+        if (isSell && profit > 0 && curUValue > 0) {
+            uint256 everyProfit = (finallyValue * profit) / (curUValue * 10000);
+
+            profitNodeFee = everyProfit * profitFee.nodeFee;
+            profitClusterFee = everyProfit * profitFee.clusterFee;
+            profitMarketFee = everyProfit * profitFee.marketFee;
+            profitTechFee = everyProfit * profitFee.techFee;
+            profitSubFee = everyProfit * profitFee.subTokenFee;
+
+            emit ProfitSlipage(value, profitNodeFee, profitClusterFee, profitMarketFee, profitTechFee, profitSubFee);
+        }
+
+        finallyValue =
+            finallyValue - (profitNodeFee + profitClusterFee + profitMarketFee + profitTechFee + profitSubFee);
+
+        if (profitNodeFee + swapNodeFee + swapClusterFee + profitClusterFee > 0) {
+            super._update(from, cmPool.daoRewardPool, profitNodeFee + swapNodeFee + swapClusterFee + profitClusterFee);
+        }
+
+        if (swapMarketFee + profitMarketFee > 0) {
+            cumulativeSlipage.marketFee += swapMarketFee + profitMarketFee;
+        }
+        if (swapTechFee + profitTechFee > 0) {
+            cumulativeSlipage.techFee += swapTechFee + profitTechFee;
+        }
+        if (swapSubFee + profitSubFee > 0) {
+            cumulativeSlipage.subTokenFee += swapSubFee + profitSubFee;
+        }
+        super._update(
+            from,
+            address(this),
+            swapMarketFee + profitMarketFee + swapTechFee + profitTechFee + swapSubFee + profitSubFee
+        );
+
+        if (isSell) {
+            allocateCumulativeSlipage();
+        }
+
+        super._update(from, to, finallyValue);
+    }
+
+    function allocateCumulativeSlipage() internal inSlippageLock {
+        uint256 marketFee = cumulativeSlipage.marketFee;
+        uint256 techFee = cumulativeSlipage.techFee;
+        uint256 subFee = cumulativeSlipage.subTokenFee;
+
+        cumulativeSlipage.marketFee = 0;
+        cumulativeSlipage.techFee = 0;
+        cumulativeSlipage.subTokenFee = 0;
+
+        uint256 totalSlipage = marketFee + techFee + subFee;
+        if (totalSlipage == 0 || totalSlipage > balanceOf(address(this))) {
+            return;
+        }
+
+        uint256 uAmount = SwapHelper.swapV2(V2_ROUTER, address(this), USDT, totalSlipage, currencyDistributor);
+
+        IERC20(USDT)
+            .transferFrom(currencyDistributor, cmPool.marketingDevelopmentPool, uAmount * marketFee / totalSlipage);
+        IERC20(USDT).transferFrom(currencyDistributor, cmPool.techRewardsPool, uAmount * techFee / totalSlipage);
+        IERC20(USDT).transferFrom(currencyDistributor, cmPool.subTokenPool, uAmount * subFee / totalSlipage);
+
+        emit AllocateSlipageU(uAmount, marketFee, techFee, subFee);
+    }
+
+    function getProfit(address from, address to, uint256 value, bool isBuy, bool isSell)
+        internal
+        returns (uint256 curUValue, uint256 profit)
+    {
         (uint256 rOther, uint256 rThis,,) = getReserves(mainPair, address(this));
-        uint256 curUValue;
+        if (rOther == 0 || rThis == 0) {
+            return (0, 0);
+        }
         if (isBuy) {
             curUValue = IPancakeRouter01(V2_ROUTER).getAmountIn(value, rOther, rThis);
         } else if (isSell) {
@@ -135,45 +216,12 @@ contract ChooseMeToken is
         }
 
         userCost[to] += curUValue;
-        uint256 profit;
         uint256 fromUValue = curUValue;
         if (fromUValue > userCost[from]) {
             profit = fromUValue - userCost[from];
             fromUValue = userCost[from];
         }
         userCost[from] -= fromUValue;
-
-        // Profit USDT is greater than 0, a profit handling fee will be charged
-        if (isSell && profit > 0) {
-            uint256 everyProfit = value * profit / curUValue / 10000;
-
-            uint256 normalFee;
-
-            if (block.timestamp >= marketOpenTime + 60 days) {
-                normalFee = everyProfit * profitFee.normalFee;
-                super._update(from, cmPool.normalPool, normalFee);
-            }
-
-            uint256 nodeFee = everyProfit * profitFee.nodeFee;
-            super._update(from, cmPool.daoRewardPool, nodeFee);
-
-            uint256 clusterFee = everyProfit * profitFee.clusterFee;
-            super._update(from, cmPool.daoRewardPool, clusterFee);
-
-            uint256 marketFee = everyProfit * profitFee.marketFee;
-            super._update(from, cmPool.marketingDevelopmentPool, marketFee);
-
-            uint256 techFee = everyProfit * profitFee.techFee;
-            super._update(from, cmPool.techRewardsPool, techFee);
-
-            uint256 subFee = everyProfit * profitFee.subTokenFee;
-            super._update(from, cmPool.subTokenPool, subFee);
-
-            emit ProfitSlipage(value, normalFee, nodeFee, clusterFee, marketFee, techFee, subFee);
-            finallyValue = finallyValue - (normalFee + nodeFee + clusterFee + marketFee + techFee + subFee);
-        }
-
-        super._update(from, to, finallyValue);
     }
 
     /**
@@ -340,7 +388,7 @@ contract ChooseMeToken is
         );
     }
 
-    function quote(uint amount) public view returns (uint256) {
+    function quote(uint256 amount) public view returns (uint256) {
         (uint256 rOther, uint256 rThis,,) = getReserves(mainPair, address(this));
         return IPancakeRouter01(V2_ROUTER).getAmountOut(amount, rThis, rOther);
     }
