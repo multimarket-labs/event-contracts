@@ -51,6 +51,10 @@ contract SubTokenFundingManager is
         pool = _pool;
     }
 
+    /**
+     * @dev Set pool type for liquidity operations
+     * @param _poolType Pool type (1 for PancakeSwap V2, 2 for PancakeSwap V3)
+     */
     function setPoolType(uint8 _poolType) external onlyOwner {
         require(_poolType == 1 || _poolType == 2, "Invalid pool type");
         poolType = _poolType;
@@ -66,8 +70,8 @@ contract SubTokenFundingManager is
     }
 
     /**
-     * @dev Use funds to bet on event
-     * @param amount add liquidity amount
+     * @dev Add liquidity to trading pool
+     * @param amount Amount of underlying token to add to liquidity pool
      */
     function addLiquidity(uint256 amount) external onlyOperatorManager {
         require(amount > 0, "Amount must be greater than 0");

@@ -11,6 +11,15 @@ import "@pancake-v2-periphery/interfaces/IPancakeRouter02.sol";
 library SwapHelper {
     using SafeERC20 for IERC20;
 
+    /**
+     * @dev Swap tokens on PancakeSwap V3 pool
+     * @param pool PancakeSwap V3 pool address
+     * @param tokenIn Input token address
+     * @param tokenOut Output token address
+     * @param amountIn Amount of input token to swap
+     * @param recipient Address to receive output tokens
+     * @return Amount of output tokens received
+     */
     function swapV3(address pool, address tokenIn, address tokenOut, uint256 amountIn, address recipient)
         internal
         returns (uint256)
@@ -35,6 +44,13 @@ library SwapHelper {
         return tokenOutReceived;
     }
 
+    /**
+     * @dev Handle PancakeSwap V3 swap callback by transferring tokens to pool
+     * @param pool PancakeSwap V3 pool address
+     * @param amount0Delta Change in token0 balance (positive means tokens owed to pool)
+     * @param amount1Delta Change in token1 balance (positive means tokens owed to pool)
+     * @param recipient Recipient address for the callback
+     */
     function handleSwapCallback(address pool, int256 amount0Delta, int256 amount1Delta, address recipient) internal {
         if (amount0Delta > 0) {
             address token0 = IPancakeV3Pool(pool).token0();
@@ -46,6 +62,19 @@ library SwapHelper {
         }
     }
 
+    /**
+     * @dev Add liquidity to PancakeSwap V3 position
+     * @param positionManager NFT Position Manager contract address
+     * @param pool PancakeSwap V3 pool address
+     * @param positionTokenId NFT token ID of the liquidity position
+     * @param token0 First token address
+     * @param token1 Second token address
+     * @param amount Total amount of token0 to use (50% will be swapped to token1)
+     * @param slippageTolerance Slippage tolerance percentage (e.g., 95 for 5% slippage)
+     * @return liquidityAdded Amount of liquidity tokens minted
+     * @return amount0Used Amount of token0 used
+     * @return amount1Used Amount of token1 used
+     */
     function addLiquidityV3(
         address positionManager,
         address pool,
@@ -90,6 +119,15 @@ library SwapHelper {
             IV3NonfungiblePositionManager(positionManager).increaseLiquidity(params);
     }
 
+    /**
+     * @dev Swap tokens on PancakeSwap V2 router
+     * @param router PancakeSwap V2 router address
+     * @param tokenIn Input token address
+     * @param tokenOut Output token address
+     * @param amount Amount of input token to swap
+     * @param to Address to receive output tokens
+     * @return Amount of output tokens received
+     */
     function swapV2(address router, address tokenIn, address tokenOut, uint256 amount, address to) internal returns (uint256) {
         uint256 balOld = IERC20(tokenOut).balanceOf(to);
         IERC20(tokenIn).approve(router, amount);
@@ -102,6 +140,17 @@ library SwapHelper {
         return balNew - balOld;
     }
 
+    /**
+     * @dev Add liquidity to PancakeSwap V2 pool
+     * @param router PancakeSwap V2 router address
+     * @param token0 First token address
+     * @param token1 Second token address
+     * @param amount Total amount of token0 to use (50% will be swapped to token1)
+     * @param to Address to receive LP tokens
+     * @return liquidityAdded Amount of LP tokens minted
+     * @return amount0Used Amount of token0 used
+     * @return amount1Used Amount of token1 used
+     */
     function addLiquidityV2(
         address router,
         address token0,

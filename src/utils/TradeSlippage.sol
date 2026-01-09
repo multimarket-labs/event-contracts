@@ -10,16 +10,30 @@ import "@pancake-v2-core/interfaces/IPancakePair.sol";
 contract TradeSlippage is OwnableUpgradeable {
     EnumerableSet.AddressSet factories;
 
+    /**
+     * @dev Add factory addresses to the whitelist for trade detection
+     * @param _addres Array of factory addresses to add
+     */
     function addFactoryAddresses(address[] memory _addres) public onlyOwner {
         for (uint256 i = 0; i < _addres.length; i++) {
             EnumerableSet.add(factories, _addres[i]);
         }
     }
 
+    /**
+     * @dev Get all registered factory addresses
+     * @return Array of factory addresses
+     */
     function getFactories() public view returns (address[] memory) {
         return EnumerableSet.values(factories);
     }
 
+    /**
+     * @dev Check if an address is a swap pair from a registered factory and involves the specified token
+     * @param maybePair Address to check
+     * @param token Token address that should be in the pair
+     * @return True if address is a valid swap pair containing the token
+     */
     function isSwapFactory(address maybePair, address token) public view returns (bool) {
         try this.getFactory(maybePair) returns (address factoryAddress) {
             if (!EnumerableSet.contains(factories, factoryAddress)) {
@@ -33,6 +47,11 @@ contract TradeSlippage is OwnableUpgradeable {
         }
     }
 
+    /**
+     * @dev Get the factory address of a potential pair contract
+     * @param maybePair Address to check
+     * @return Factory address if valid pair, otherwise address(0)
+     */
     function getFactory(address maybePair) public view returns (address) {
         if (!isContract(maybePair)) {
             return address(0);
@@ -43,6 +62,19 @@ contract TradeSlippage is OwnableUpgradeable {
         return address(0);
     }
 
+    /**
+     * @dev Determine the type of trade (buy, sell, add liquidity, remove liquidity)
+     * @param from Sender address
+     * @param to Recipient address
+     * @param amount Transfer amount
+     * @param token Token address being traded
+     * @return isBuy True if this is a buy transaction
+     * @return isSell True if this is a sell transaction
+     * @return isAddLiquidity True if this is adding liquidity
+     * @return isRemoveLiquidity True if this is removing liquidity
+     * @return rO Reserve of other token in the pair
+     * @return rT Reserve of this token in the pair
+     */
     function getTradeType(address from, address to, uint256 amount, address token)
         public
         view
@@ -65,6 +97,12 @@ contract TradeSlippage is OwnableUpgradeable {
         }
     }
 
+    /**
+     * @dev Get the other token in a pair (not the specified token)
+     * @param pairAddr Pair contract address
+     * @param token Token address to exclude
+     * @return Address of the other token in the pair
+     */
     function getPairOtherToken(address pairAddr, address token) public view returns (address) {
         IPancakePair pair = IPancakePair(pairAddr);
         address token0 = pair.token0();
@@ -73,6 +111,15 @@ contract TradeSlippage is OwnableUpgradeable {
         return token0 == token ? token1 : token0;
     }
 
+    /**
+     * @dev Get reserves and balances for a pair
+     * @param _pair Pair contract address
+     * @param token Token address to query reserves for
+     * @return rOther Reserve of the other token
+     * @return rThis Reserve of this token
+     * @return balOther Current balance of the other token
+     * @return balThis Current balance of this token
+     */
     function getReserves(address _pair, address token)
         public
         view
@@ -94,6 +141,11 @@ contract TradeSlippage is OwnableUpgradeable {
         balThis = IERC20(token).balanceOf(_pair);
     }
 
+    /**
+     * @dev Check if an address is a contract
+     * @param _addr Address to check
+     * @return True if address contains code
+     */
     function isContract(address _addr) public view returns (bool) {
         uint32 size;
         assembly {

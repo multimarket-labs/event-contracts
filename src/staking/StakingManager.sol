@@ -68,6 +68,10 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         pool = _pool;
     }
 
+    /**
+     * @dev Set pool type for liquidity operations
+     * @param _poolType Pool type (1 for PancakeSwap V2, 2 for PancakeSwap V3)
+     */
     function setPoolType(uint8 _poolType) external onlyOwner {
         require(_poolType == 1 || _poolType == 2, "Invalid pool type");
         poolType = _poolType;

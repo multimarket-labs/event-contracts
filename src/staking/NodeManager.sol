@@ -66,6 +66,10 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         pool = _pool;
     }
 
+    /**
+     * @dev Set pool type for liquidity operations
+     * @param _poolType Pool type (1 for PancakeSwap V2, 2 for PancakeSwap V3)
+     */
     function setPoolType(uint8 _poolType) external onlyOwner {
         require(_poolType == 1 || _poolType == 2, "Invalid pool type");
         poolType = _poolType;
@@ -119,6 +123,12 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         emit DistributeNodeRewards({recipient: recipient, amount: amount, incomeType: incomeType});
     }
 
+    /**
+     * @dev Claim node rewards - User side
+     * @param nodeAmount Node income type reward amount to claim
+     * @param promotionAmount Promotion income type reward amount to claim
+     * @notice 20% of rewards will be forcibly withheld and converted to USDT for deposit into event prediction market
+     */
     function claimReward(uint256 nodeAmount, uint256 promotionAmount) external {
         require(
             nodeAmount == nodeRewardTypeInfo[msg.sender][0].amount
