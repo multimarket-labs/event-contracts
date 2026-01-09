@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "../interfaces/staking/pancake/IPancakeV3Pool.sol";
 import "@pancake-v2-core/interfaces/IPancakePair.sol";
 import "@pancake-v2-core/interfaces/IPancakeFactory.sol";
-import "@pancake-v2-periphery/interfaces/IPancakeRouter01.sol";
+import "@pancake-v2-periphery/interfaces/IPancakeRouter02.sol";
 import {TradeSlippage} from "../utils/TradeSlippage.sol";
 import "./ChooseMeTokenStorage.sol";
 
@@ -77,6 +77,14 @@ contract ChooseMeToken is
         
     }
 
+    /**
+     * @dev Override ERC20 transfer function to implement trading fees and profit fees
+     * @param from Sender address
+     * @param to Recipient address
+     * @param value Transfer amount
+     * @notice Applies 3% trading fees on buy/sell: 0.5% node, 0.5% cluster, 0.5% marketing, 1% tech, 0.5% sub-token
+     * @notice Applies profit fees when selling at profit: 16% normal, 10% node, 5% cluster, 5% marketing, 5% tech, 5% sub-token
+     */
     function _update(address from, address to, uint256 value) internal override {
         if (isWhitelisted(from, to) || !isAllocation) {
             super._update(from, to, value);
@@ -170,28 +178,55 @@ contract ChooseMeToken is
         super._update(from, to, finallyValue);
     }
 
+    /**
+     * @dev Check if address is a special pool address (used for cost basis calculation)
+     * @param from Address to check
+     * @return True if address is one of the special pool addresses
+     */
     function isFromSpecial(address from) internal view returns (bool) {
         return from == cmPool.nodePool || from == cmPool.daoRewardPool || from == cmPool.techRewardsPool
             || from == cmPool.ecosystemPool || from == cmPool.foundingStrategyPool
             || from == cmPool.marketingDevelopmentPool || from == cmPool.subTokenPool;
     }
 
+    /**
+     * @dev Check if from or to address is whitelisted (exempt from fees)
+     * @param from Sender address
+     * @param to Recipient address
+     * @return True if either address is whitelisted
+     */
     function isWhitelisted(address from, address to) public view returns (bool) {
         return EnumerableSet.contains(whiteList, from) || EnumerableSet.contains(whiteList, to);
     }
 
+    /**
+     * @dev Add addresses to whitelist (exempt from trading fees)
+     * @param _address Array of addresses to add to whitelist
+     */
     function addWhitelist(address[] memory _address) external onlyOwner {
         for (uint256 i = 0; i < _address.length; i++) {
             EnumerableSet.add(whiteList, _address[i]);
         }
     }
 
+    /**
+     * @dev Remove addresses from whitelist
+     * @param _address Array of addresses to remove from whitelist
+     */
     function removeWhitelist(address[] memory _address) external onlyOwner {
         for (uint256 i = 0; i < _address.length; i++) {
             EnumerableSet.remove(whiteList, _address[i]);
         }
     }
 
+    /**
+     * @dev Determine if transaction is a buy or sell on PancakeSwap V3
+     * @param from Sender address
+     * @param to Recipient address
+     * @param amount Transfer amount
+     * @return isBuy True if this is a buy transaction
+     * @return isSell True if this is a sell transaction
+     */
     function getV3TradeType(address from, address to, uint256 amount) public view returns (bool isBuy, bool isSell) {
         bool isLiquidityOperation = (msg.sender == V3_POSITION_MANAGER);
         if (isLiquidityOperation) {
@@ -205,6 +240,11 @@ contract ChooseMeToken is
         }
     }
 
+    /**
+     * @dev Check if address is a PancakeSwap V3 pool
+     * @param _maybePool Address to check
+     * @return True if address is a V3 pool
+     */
     function checkIsPool(address _maybePool) public view returns (bool) {
         try this._checkIsPool(_maybePool) returns (bool isPool) {
             return isPool;
@@ -213,6 +253,11 @@ contract ChooseMeToken is
         }
     }
 
+    /**
+     * @dev Internal function to verify if address is a PancakeSwap V3 pool by calling factory() method
+     * @param _maybePool Address to check
+     * @return True if address has valid factory() method and factory matches V3_FACTORY
+     */
     function _checkIsPool(address _maybePool) public view returns (bool) {
         if (_maybePool.code.length == 0) {
             return false;
@@ -252,10 +297,18 @@ contract ChooseMeToken is
         emit SetStakingManager(_stakingManager);
     }
 
+    /**
+     * @dev Set trading fee percentages (in basis points, 100 = 1%)
+     * @param _tradeFee Struct containing all trading fee percentages
+     */
     function setTradeFee(ChooseMeTradeFee memory _tradeFee) external onlyOwner {
         tradeFee = _tradeFee;
     }
 
+    /**
+     * @dev Set profit fee percentages (in basis points, 100 = 1%)
+     * @param _profitFee Struct containing all profit fee percentages
+     */
     function setProfitFee(ChooseMeProfitFee memory _profitFee) external onlyOwner {
         profitFee = _profitFee;
     }
@@ -264,7 +317,7 @@ contract ChooseMeToken is
      * @dev Set all pool addresses
      * @param _pool Struct containing all pool addresses
      */
-    function setPoolAddress(chooseMePool memory _pool) external onlyOwner {
+    function setPoolAddress(ChooseMePool memory _pool) external onlyOwner {
         _beforeAllocation();
         _beforePoolAddress(_pool);
         cmPool = _pool;
@@ -318,7 +371,7 @@ contract ChooseMeToken is
      * @dev Validation before setting pool addresses, ensures all pool addresses are set
      * @param _pool Pool address struct to validate
      */
-    function _beforePoolAddress(chooseMePool memory _pool) internal virtual {
+    function _beforePoolAddress(ChooseMePool memory _pool) internal virtual {
         require(_pool.nodePool != address(0), "ChooseMeToken _beforeAllocation:Missing allocate bottomPool address");
         require(
             _pool.daoRewardPool != address(0), "ChooseMeToken _beforeAllocation:Missing allocate daoRewardPool address"

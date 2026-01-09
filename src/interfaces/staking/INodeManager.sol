@@ -39,11 +39,13 @@ interface INodeManager {
         uint8 incomeType
     );
 
+    // 1 pancake v2 liquidity; 2 pancake v3 liquidity ; 
     event LiquidityAdded (
-        address indexed pair,
+        uint8 indexed poolType,  
+        uint256 indexed tokenId,
         uint256 liquidity,
-        uint256 amountA,
-        uint256 amountB
+        uint256 amount0,
+        uint256 amount1
     );
 
     error InvalidNodeTypeError(uint256 amount);
@@ -52,6 +54,6 @@ interface INodeManager {
 
     function purchaseNode(uint256 amount) external;
     function distributeRewards(address recipient, uint256 amount, uint8 incomeType) external;
-    function claimReward(uint8 incomeType,uint rewardAmount) external;
+    function claimReward(uint256 nodeAmount, uint256 promotionAmount) external;
     function addLiquidity(uint256 amount) external;
 }

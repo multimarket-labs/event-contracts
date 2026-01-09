@@ -927,7 +927,7 @@ contract IntegratedTestStakingScript is Script {
         address deployerAddress = vm.addr(deployerPrivateKey);
 
         chooseMeToken.setPoolAddress(
-            ChooseMeTokenStorage.chooseMePool({
+            ChooseMeTokenStorage.ChooseMePool({
                 nodePool: address(nodeManager),
                 daoRewardPool: address(daoRewardManager),
                 airdropPool: deployerAddress,
