@@ -33,11 +33,11 @@ interface IStakingManager {
 
     struct LiquidityProviderInfo {
         address liquidityProvider;
-        uint8   stakingType;
+        uint8 stakingType;
         uint256 amount;
         uint256 startTime;
         uint256 endTime;
-        uint8   stakingStatus;
+        uint8 stakingStatus;
     }
 
     struct LiquidityProviderStakingReward {
@@ -53,48 +53,26 @@ interface IStakingManager {
 
     event LiquidityProviderDeposits(
         address indexed tokenAddress,
-        uint8   indexed stakingType,
+        uint8 indexed stakingType,
         address indexed liquidityProvider,
         uint256 amount,
         uint256 startTime,
         uint256 endTime
     );
 
-    event LiquidityProviderRewards (
-        address indexed liquidityProvider,
-        uint256 amount,
-        uint256 rewardBlock,
-        uint8   incomeType
+    event LiquidityProviderRewards(
+        address indexed liquidityProvider, uint256 amount, uint256 rewardBlock, uint8 incomeType
     );
 
-    event lpRoundStakingOver(
-        address indexed liquidityProvider,
-        uint256 endBlock,
-        uint256 endTime
-    );
+    event lpRoundStakingOver(address indexed liquidityProvider, uint256 endBlock, uint256 endTime);
 
-    event lpClaimReward (
-        address indexed liquidityProvider,
-        uint256 withdrawAmount,
-        uint256 toPredictionAmount
-    );
+    event lpClaimReward(address indexed liquidityProvider, uint256 withdrawAmount, uint256 toPredictionAmount);
 
-    event outOfAchieveReturnsNodeExit (
-        address indexed liquidityProvider,
-        uint256 totalReward,
-        uint256  blockNumber
-    );
+    event outOfAchieveReturnsNodeExit(address indexed liquidityProvider, uint256 totalReward, uint256 blockNumber);
 
-    event LiquidityAdded (
-        uint256 liquidity,
-        uint256 amount0,
-        uint256 amount1
-    );
+    event LiquidityAdded(uint256 liquidity, uint256 amount0, uint256 amount1);
 
-    event TokensBurned (
-        uint256 usdtAmount,
-        uint256 tokensBurned
-    );
+    event TokensBurned(uint256 usdtAmount, uint256 tokensBurned);
 
     error InvalidAmountError(uint256 amount);
     error InvalidRewardTypeError(uint8 incomeType);
@@ -102,7 +80,7 @@ interface IStakingManager {
     error LpUnderStakingPeriodError(address lpAddress, uint256 lpRound);
     error InvalidRewardAmount(address lpAddress, uint256 lpRound);
 
-    function liquidityProviderDeposit(address inviter, uint256 amount) external;
+    function liquidityProviderDeposit(uint256 amount) external;
 
     function getLiquidityProvidersByType(uint8 stakingType) external view returns (address[] memory);
 

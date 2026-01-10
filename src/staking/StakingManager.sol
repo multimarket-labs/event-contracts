@@ -7,6 +7,7 @@ import "@openzeppelin-upgrades/contracts/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import "../interfaces/staking/INodeManager.sol";
 import "../interfaces/token/IDaoRewardManager.sol";
 import "../interfaces/token/IChooseMeToken.sol";
 import "../interfaces/staking/IEventFundingManager.sol";
@@ -46,7 +47,8 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         address _usdt,
         address _stakingOperatorManager,
         address _daoRewardManager,
-        address _eventFundingManager
+        address _eventFundingManager,
+        address _nodeManager
     ) public initializer {
         __Ownable_init(initialOwner);
         underlyingToken = _underlyingToken;
@@ -54,14 +56,14 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         stakingOperatorManager = _stakingOperatorManager;
         daoRewardManager = IDaoRewardManager(_daoRewardManager);
         eventFundingManager = IEventFundingManager(_eventFundingManager);
+        nodeManager = INodeManager(_nodeManager);
     }
 
     /**
      * @dev Liquidity provider staking deposit - User side
-     * @param myInviter Inviter address
      * @param amount Staking amount, must match one of the staking types from T1-T6
      */
-    function liquidityProviderDeposit(address myInviter, uint256 amount) external {
+    function liquidityProviderDeposit(uint256 amount) external {
         if (
             amount != t1Staking && amount != t2Staking && amount != t3Staking && amount != t4Staking
                 && amount != t5Staking && amount != t6Staking
@@ -69,9 +71,10 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
             revert InvalidAmountError(amount);
         }
 
-        if (inviteRelationShip[msg.sender] == address(0) && myInviter != address(0) && myInviter != msg.sender) {
-            inviteRelationShip[msg.sender] = myInviter;
-        }
+        require(
+            nodeManager.inviters(msg.sender) != address(0), "StakingManager.liquidityProviderDeposit: inviter not set"
+        );
+
         require(
             amount >= userCurrentLiquidityProvider[msg.sender],
             "StakingManager.liquidityProviderDeposit: amount should more than previous staking amount"
@@ -142,7 +145,7 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
 
         totalLpStakingReward[lpAddress].totalReward += amount;
         uint256 usdtRewardAmount = IChooseMeToken(underlyingToken).quote(totalLpStakingReward[lpAddress].totalReward);
-        if(usdtRewardAmount > totalLpStakingReward[lpAddress].totalStaking * 3){
+        if (usdtRewardAmount > totalLpStakingReward[lpAddress].totalStaking * 3) {
             outOfAchieveReturnsNode(lpAddress, totalLpStakingReward[lpAddress].totalReward);
         }
 

@@ -5,7 +5,6 @@ import "../interfaces/staking/INodeManager.sol";
 import "../interfaces/token/IDaoRewardManager.sol";
 import "../interfaces/staking/IEventFundingManager.sol";
 
-
 abstract contract NodeManagerStorage is INodeManager {
     uint256 public constant buyDistributedNode = 500 * 10 ** 18;
     uint256 public constant buyClusterNode = 1000 * 10 ** 18;
@@ -24,6 +23,7 @@ abstract contract NodeManagerStorage is INodeManager {
 
     mapping(address => RewardClaimInfo) public rewardClaimInfo;
 
+    mapping(address => address) public inviters;
 
     uint256[100] private __gap;
 }

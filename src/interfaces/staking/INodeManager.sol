@@ -32,6 +32,7 @@ interface INodeManager {
         uint256 claimedReward;
         bool isOutOf;
     }
+    event BindInviter(address indexed inviter, address indexed invitee);
 
     event outOfAchieveReturnsNodeExit(address indexed recipient, uint256 totalReward, uint256 blockNumber);
 
@@ -48,4 +49,6 @@ interface INodeManager {
     function distributeRewards(address recipient, uint256 amount, uint8 incomeType) external;
     function claimReward(uint256 amount) external;
     function addLiquidity(uint256 amount) external;
+
+    function inviters(address user) external returns (address);
 }

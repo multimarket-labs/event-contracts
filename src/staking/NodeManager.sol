@@ -61,6 +61,7 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         if (nodeBuyerInfo[msg.sender].amount > 0) {
             revert HaveAlreadyBuyNode(msg.sender);
         }
+        require(inviters[msg.sender] != address(0), "inviter not set");
 
         uint8 buyNodeType = matchNodeTypeByAmount(amount);
         IERC20(USDT).safeTransferFrom(msg.sender, address(this), amount);
@@ -68,6 +69,14 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
         nodeBuyerInfo[msg.sender] = buyerInfo;
 
         emit PurchaseNodes({buyer: msg.sender, amount: amount, nodeType: buyNodeType});
+    }
+
+    function bindInviter(address inviter) public {
+        require(inviter != address(0), "Inviter cannot be zero address");
+        require(inviters[msg.sender] == address(0), "Inviter already set");
+
+        inviters[msg.sender] = inviter;
+        emit BindInviter({inviter: inviter, invitee: msg.sender});
     }
 
     /**
@@ -143,7 +152,7 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
      * @param amount Purchase amount
      * @return Node type (0 - distributed node, 1 - cluster node)
      */
-    function matchNodeTypeByAmount(uint256 amount) internal view returns (uint8) {
+    function matchNodeTypeByAmount(uint256 amount) internal pure returns (uint8) {
         uint8 buyNodeType;
         if (amount == buyDistributedNode) {
             buyNodeType = uint8(NodeType.DistributedNode);

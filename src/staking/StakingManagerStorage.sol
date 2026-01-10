@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "../interfaces/staking/IStakingManager.sol";
 import "../interfaces/token/IDaoRewardManager.sol";
 import "../interfaces/staking/IEventFundingManager.sol";
+import "../interfaces/staking/INodeManager.sol";
 
 abstract contract StakingManagerStorage is IStakingManager {
     uint256 public constant t1Staking = 200 * 10 ** 18;
@@ -28,6 +29,7 @@ abstract contract StakingManagerStorage is IStakingManager {
 
     IDaoRewardManager public daoRewardManager;
     IEventFundingManager public eventFundingManager;
+    INodeManager public nodeManager;
 
     address public USDT;
     address public underlyingToken;
@@ -40,10 +42,9 @@ abstract contract StakingManagerStorage is IStakingManager {
     mapping(address => LiquidityProviderStakingReward) public totalLpStakingReward;
 
     mapping(uint8 => address[]) public differentTypeLpList;
-    mapping(address => address) public inviteRelationShip;
     mapping(address => bool) public teamOutOfReward;
 
-    mapping(address => uint) public userCurrentLiquidityProvider;
+    mapping(address => uint256) public userCurrentLiquidityProvider;
 
     uint256[100] private __gap;
 }
