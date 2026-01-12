@@ -48,7 +48,8 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         address _stakingOperatorManager,
         address _daoRewardManager,
         address _eventFundingManager,
-        address _nodeManager
+        address _nodeManager,
+        address _subTokenFundingManager
     ) public initializer {
         __Ownable_init(initialOwner);
         underlyingToken = _underlyingToken;
@@ -57,6 +58,7 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
         daoRewardManager = IDaoRewardManager(_daoRewardManager);
         eventFundingManager = IEventFundingManager(_eventFundingManager);
         nodeManager = INodeManager(_nodeManager);
+        subTokenFundingManager = _subTokenFundingManager;
     }
 
     /**
@@ -247,12 +249,14 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
      * @dev Swap USDT for underlying token and burn
      * @param amount USDT amount to swap
      */
-    function swapBurn(uint256 amount) external onlyStakingOperatorManager {
+    function swapBurn(uint256 amount, uint256 subTokenUAmount) external onlyStakingOperatorManager {
         require(amount > 0, "Amount must be greater than 0");
 
         uint256 underlyingTokenReceived = SwapHelper.swapV2(V2_ROUTER, USDT, underlyingToken, amount, address(this));
         require(underlyingTokenReceived > 0, "No tokens received from swap");
         IChooseMeToken(underlyingToken).burn(address(this), underlyingTokenReceived);
+
+        IERC20(USDT).transfer(subTokenFundingManager, subTokenUAmount);
 
         emit TokensBurned(amount, underlyingTokenReceived);
     }

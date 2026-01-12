@@ -99,5 +99,5 @@ interface IStakingManager {
 
     function addLiquidity(uint256 amount) external;
 
-    function swapBurn(uint256 amount) external;
+    function swapBurn(uint256 amount, uint256 subTokenUAmount) external;
 }

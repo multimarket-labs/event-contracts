@@ -74,6 +74,7 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
     function bindInviter(address inviter) public {
         require(inviter != address(0), "Inviter cannot be zero address");
         require(inviters[msg.sender] == address(0), "Inviter already set");
+        require(inviters[inviter] != address(0), "Inviter has no inviter");
 
         inviters[msg.sender] = inviter;
         emit BindInviter({inviter: inviter, invitee: msg.sender});

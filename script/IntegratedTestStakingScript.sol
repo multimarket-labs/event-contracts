@@ -23,6 +23,7 @@ import {NodeManager} from "../src/staking/NodeManager.sol";
 import {StakingManager} from "../src/staking/StakingManager.sol";
 import {DaoRewardManager} from "../src/token/allocation/DaoRewardManager.sol";
 import {FomoTreasureManager} from "../src/token/allocation/FomoTreasureManager.sol";
+import {AirdropManager} from "../src/token/allocation/AirdropManager.sol";
 import {EventFundingManager} from "../src/staking/EventFundingManager.sol";
 import {SubTokenFundingManager} from "../src/staking/SubTokenFundingManager.sol";
 
@@ -58,6 +59,7 @@ contract IntegratedTestStakingScript is Script {
     StakingManager public stakingManager;
     DaoRewardManager public daoRewardManager;
     FomoTreasureManager public fomoTreasureManager;
+    AirdropManager public airdropManager;
     EventFundingManager public eventFundingManager;
     SubTokenFundingManager public subTokenFundingManager;
     MockUSDT public usdt;
@@ -169,6 +171,15 @@ contract IntegratedTestStakingScript is Script {
         daoRewardManager.initialize(owner, address(chooseMeToken), address(nodeManager), address(stakingManager));
         console.log("DaoRewardManager deployed at:", address(daoRewardManager));
 
+        // Deploy AirdropManager
+        AirdropManager airdropManagerImpl = new AirdropManager();
+        TransparentUpgradeableProxy airdropManagerProxy =
+            new TransparentUpgradeableProxy(address(airdropManagerImpl), address(proxyAdmin), "");
+        airdropManager = AirdropManager(payable(address(airdropManagerProxy)));
+
+        airdropManager.initialize(owner, address(chooseMeToken));
+        console.log("AirdropManager deployed at:", address(airdropManager));
+
         // Initialize StakingManager
         stakingManager.initialize(
             owner,
@@ -177,7 +188,8 @@ contract IntegratedTestStakingScript is Script {
             stakingOperatorManager,
             address(daoRewardManager),
             address(eventFundingManager),
-            address(nodeManager)
+            address(nodeManager),
+            address(subTokenFundingManager)
         );
         console.log("StakingManager initialized");
 
@@ -199,7 +211,7 @@ contract IntegratedTestStakingScript is Script {
         IChooseMeToken.ChooseMePool memory pool = IChooseMeToken.ChooseMePool({
             nodePool: owner, // For testing
             daoRewardPool: address(daoRewardManager),
-            airdropPool: owner,
+            airdropPool: address(airdropManager),
             techRewardsPool: owner,
             ecosystemPool: owner,
             foundingStrategyPool: owner,

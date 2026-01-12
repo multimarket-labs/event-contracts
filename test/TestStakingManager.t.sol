@@ -7,6 +7,7 @@ import "../src/interfaces/staking/IStakingManager.sol";
 import "../src/interfaces/token/IDaoRewardManager.sol";
 import "../src/interfaces/token/IChooseMeToken.sol";
 import "../src/interfaces/staking/IEventFundingManager.sol";
+import "../src/interfaces/staking/ISubTokenFundingManager.sol";
 import "../src/token/allocation/DaoRewardManager.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
@@ -94,6 +95,26 @@ contract MockEventFundingManager is IEventFundingManager {
     function bettingEvent(address event_pool, uint256 amount) external override {}
 }
 
+// Mock SubTokenFundingManager for testing
+contract MockSubTokenFundingManager is ISubTokenFundingManager {
+    address public V2_ROUTER;
+    address public USDT;
+    address public operatorManager;
+    uint256 public totalLiquidityAdded;
+
+    constructor(address _v2Router, address _usdt, address _operatorManager) {
+        V2_ROUTER = _v2Router;
+        USDT = _usdt;
+        operatorManager = _operatorManager;
+    }
+
+    function addLiquidity(uint256 amount) external override {
+        IERC20(USDT).transferFrom(msg.sender, address(this), amount);
+        totalLiquidityAdded += amount;
+        emit LiquidityAdded(amount, amount / 2, amount / 2);
+    }
+}
+
 // Mock NodeManager for testing
 contract MockNodeManager {
     mapping(address => address) public inviters;
@@ -153,6 +174,7 @@ contract TestStakingManager is Test {
     MockChooseMeToken public cmt;
     MockDaoRewardManager public daoRewardManager;
     MockEventFundingManager public eventFundingManager;
+    MockSubTokenFundingManager public subTokenFundingManager;
     MockNodeManager public nodeManager;
     MockPancakeRouter public pancakeRouter;
     ProxyAdmin public proxyAdmin;
@@ -212,6 +234,9 @@ contract TestStakingManager is Test {
         usdt.mint(REAL_V2_ROUTER, 10000000 * 10 ** 18);
         cmt.mint(REAL_V2_ROUTER, 10000000 * 10 ** 18);
 
+        // Deploy SubTokenFundingManager
+        subTokenFundingManager = new MockSubTokenFundingManager(REAL_V2_ROUTER, address(usdt), operatorManager);
+
         // Deploy StakingManager implementation
         StakingManager implementation = new StakingManager();
 
@@ -227,7 +252,8 @@ contract TestStakingManager is Test {
             operatorManager,
             address(daoRewardManager),
             address(eventFundingManager),
-            address(nodeManager)
+            address(nodeManager),
+            address(subTokenFundingManager)
         );
 
         proxy = new TransparentUpgradeableProxy(address(implementation), address(proxyAdmin), initData);
@@ -265,7 +291,8 @@ contract TestStakingManager is Test {
             operatorManager,
             address(daoRewardManager),
             address(eventFundingManager),
-            address(nodeManager)
+            address(nodeManager),
+            address(subTokenFundingManager)
         );
     }
 

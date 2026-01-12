@@ -36,11 +36,13 @@ contract SubTokenFundingManager is
      * @dev Initialize the Sub Token Funding Manager contract
      * @param initialOwner Initial owner address
      * @param _usdt USDT token address
-     * @param _subToken Sub token address
      */
-    function initialize(address initialOwner, address _usdt, address _subToken) public initializer {
+    function initialize(address initialOwner, address _usdt) public initializer {
         __Ownable_init(initialOwner);
         USDT = _usdt;
+    }
+
+    function setSubToken(address _subToken) external onlyOwner {
         subToken = _subToken;
     }
 

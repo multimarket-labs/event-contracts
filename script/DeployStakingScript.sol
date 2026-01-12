@@ -9,11 +9,12 @@ import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.so
 
 import {EmptyContract} from "../src/utils/EmptyContract.sol";
 import {ChooseMeToken} from "../src/token/ChooseMeToken.sol";
-import {NodeManager} from "../src/staking/NodeManager.sol";
-import {StakingManager} from "../src/staking/StakingManager.sol";
 import {DaoRewardManager} from "../src/token/allocation/DaoRewardManager.sol";
 import {FomoTreasureManager} from "../src/token/allocation/FomoTreasureManager.sol";
+import {NodeManager} from "../src/staking/NodeManager.sol";
+import {StakingManager} from "../src/staking/StakingManager.sol";
 import {EventFundingManager} from "../src/staking/EventFundingManager.sol";
+import {SubTokenFundingManager} from "../src/staking/SubTokenFundingManager.sol";
 
 contract TestUSDT is ERC20 {
     constructor() ERC20("TestUSDT", "USDT") {
@@ -32,6 +33,7 @@ contract DeployStakingScript is Script {
     ProxyAdmin public daoRewardManagerProxyAdmin;
     ProxyAdmin public fomoTreasureManagerProxyAdmin;
     ProxyAdmin public eventFundingManagerProxyAdmin;
+    ProxyAdmin public subTokenFundingManagerProxyAdmin;
 
     ChooseMeToken public chooseMeTokenImplementation;
     ChooseMeToken public chooseMeToken;
@@ -50,6 +52,9 @@ contract DeployStakingScript is Script {
 
     EventFundingManager public eventFundingManagerImplementation;
     EventFundingManager public eventFundingManager;
+
+    SubTokenFundingManager public subTokenFundingManagerImplementation;
+    SubTokenFundingManager public subTokenFundingManager;
 
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -100,10 +105,18 @@ contract DeployStakingScript is Script {
         fomoTreasureManagerImplementation = new FomoTreasureManager();
         fomoTreasureManagerProxyAdmin = ProxyAdmin(getProxyAdminAddress(address(proxyFomoTreasureManager)));
 
+        TransparentUpgradeableProxy proxySubTokenFundingManager =
+            new TransparentUpgradeableProxy(address(emptyContract), chooseMeMultiSign, "");
+        subTokenFundingManager = SubTokenFundingManager(payable(address(proxySubTokenFundingManager)));
+        subTokenFundingManagerImplementation = new SubTokenFundingManager();
+        subTokenFundingManagerProxyAdmin = ProxyAdmin(getProxyAdminAddress(address(proxySubTokenFundingManager)));
+
         chooseMeTokenProxyAdmin.upgradeAndCall(
             ITransparentUpgradeableProxy(address(chooseMeToken)),
             address(chooseMeTokenImplementation),
-            abi.encodeWithSelector(ChooseMeToken.initialize.selector, deployerAddress, address(stakingManager))
+            abi.encodeWithSelector(
+                ChooseMeToken.initialize.selector, chooseMeMultiSign, address(stakingManager), usdtTokenAddress
+            )
         );
 
         nodeManagerProxyAdmin.upgradeAndCall(
@@ -111,7 +124,7 @@ contract DeployStakingScript is Script {
             address(nodeManagerImplementation),
             abi.encodeWithSelector(
                 NodeManager.initialize.selector,
-                deployerAddress,
+                chooseMeMultiSign,
                 address(daoRewardManager),
                 address(chooseMeToken),
                 usdtTokenAddress,
@@ -125,12 +138,13 @@ contract DeployStakingScript is Script {
             address(stakingManagerImplementation),
             abi.encodeWithSelector(
                 StakingManager.initialize.selector,
-                deployerAddress,
+                chooseMeMultiSign,
                 address(chooseMeToken),
                 usdtTokenAddress,
-                chooseMeMultiSign,
+                distributeRewardAddress,
                 address(daoRewardManager),
-                address(eventFundingManager)
+                address(eventFundingManager),
+                address(nodeManager)
             )
         );
 
@@ -139,7 +153,7 @@ contract DeployStakingScript is Script {
             address(daoRewardManagerImplementation),
             abi.encodeWithSelector(
                 DaoRewardManager.initialize.selector,
-                deployerAddress,
+                chooseMeMultiSign,
                 address(chooseMeToken),
                 address(nodeManager),
                 address(stakingManager)
@@ -149,13 +163,19 @@ contract DeployStakingScript is Script {
         fomoTreasureManagerProxyAdmin.upgradeAndCall(
             ITransparentUpgradeableProxy(address(fomoTreasureManager)),
             address(fomoTreasureManagerImplementation),
-            abi.encodeWithSelector(FomoTreasureManager.initialize.selector, deployerAddress, address(chooseMeToken))
+            abi.encodeWithSelector(FomoTreasureManager.initialize.selector, chooseMeMultiSign, address(chooseMeToken))
         );
 
         eventFundingManagerProxyAdmin.upgradeAndCall(
             ITransparentUpgradeableProxy(address(eventFundingManager)),
             address(eventFundingManagerImplementation),
-            abi.encodeWithSelector(EventFundingManager.initialize.selector, deployerAddress, usdtTokenAddress)
+            abi.encodeWithSelector(EventFundingManager.initialize.selector, chooseMeMultiSign, usdtTokenAddress)
+        );
+
+        subTokenFundingManagerProxyAdmin.upgradeAndCall(
+            ITransparentUpgradeableProxy(address(subTokenFundingManager)),
+            address(subTokenFundingManagerImplementation),
+            abi.encodeWithSelector(SubTokenFundingManager.initialize.selector, chooseMeMultiSign, usdtTokenAddress)
         );
 
         console.log("deploy usdtTokenAddress:", usdtTokenAddress);
@@ -165,18 +185,22 @@ contract DeployStakingScript is Script {
         console.log("deploy proxyDaoRewardManager:", address(proxyDaoRewardManager));
         console.log("deploy proxyFomoTreasureManager:", address(proxyFomoTreasureManager));
         console.log("deploy proxyEventFundingManager:", address(proxyEventFundingManager));
+        console.log("deploy proxySubTokenFundingManager:", address(proxySubTokenFundingManager));
 
         vm.stopBroadcast();
 
-        // string memory obj = "{}";
-        // vm.serializeAddress(obj, "usdtTokenAddress", usdtTokenAddress);
-        // vm.serializeAddress(obj, "proxyChooseMeToken", proxyChooseMeToken);
-        // vm.serializeAddress(obj, "proxyStakingManager", proxyStakingManager);
-        // vm.serializeAddress(obj, "proxyNodeManager", proxyNodeManager);
-        // vm.serializeAddress(obj, "proxyDaoRewardManager", proxyDaoRewardManager);
-        // vm.serializeAddress(obj, "proxyFomoTreasureManager", proxyFomoTreasureManager);
-        // string memory finalJSON = vm.serializeAddress(obj, "proxyEventFundingManager", proxyEventFundingManager);
-        // vm.writeJson(finalJSON, "./cache/__deployed_addresses.json");
+        string memory obj = "{}";
+        vm.serializeAddress(obj, "usdtTokenAddress", usdtTokenAddress);
+        vm.serializeAddress(obj, "proxyChooseMeToken", address(proxyChooseMeToken));
+        vm.serializeAddress(obj, "proxyStakingManager", address(proxyStakingManager));
+        vm.serializeAddress(obj, "proxyNodeManager", address(proxyNodeManager));
+        vm.serializeAddress(obj, "proxyDaoRewardManager", address(proxyDaoRewardManager));
+        vm.serializeAddress(obj, "proxyFomoTreasureManager", address(proxyFomoTreasureManager));
+        vm.serializeAddress(obj, "proxyEventFundingManager", address(proxyEventFundingManager));
+        string memory finalJSON =
+            vm.serializeAddress(obj, "proxySubTokenFundingManager", address(proxySubTokenFundingManager));
+
+        vm.writeJson(finalJSON, "./cache/__deployed_addresses.json");
     }
 
     function getProxyAdminAddress(address proxy) internal view returns (address) {
@@ -198,6 +222,7 @@ contract DeployStakingScript is Script {
     {
         uint256 mode = vm.envUint("MODE");
         deployerAddress = vm.addr(deployerPrivateKey);
+        console.log("mode:", mode == 0 ? "development" : "production");
         if (mode == 0) {
             vm.startBroadcast(deployerPrivateKey);
             distributeRewardAddress = deployerAddress;
@@ -211,6 +236,4 @@ contract DeployStakingScript is Script {
             usdtTokenAddress = vm.envAddress("USDT_TOKEN_ADDRESS");
         }
     }
-
-    
 }
