@@ -172,7 +172,7 @@ contract BroadcastStakingScript is Script {
         vm.stopBroadcast();
     }
 
-    function swapTransfer(uint256 userPrivateKey, address token0, address token1, uint256 amount0) internal {
+    function swap(uint256 userPrivateKey, address token0, address token1, uint256 amount0) internal {
         address userAddress = vm.rememberKey(userPrivateKey);
         address initPoolAddress = vm.rememberKey(initPoolPrivateKey);
         address deployerAddress = vm.rememberKey(deployerPrivateKey);
@@ -227,5 +227,291 @@ contract BroadcastStakingScript is Script {
         console.log("Amount out:", amounts[1]);
 
         vm.stopBroadcast();
+    }
+
+    /**
+     * @dev 绑定邀请人
+     * @param userPrivateKey 用户私钥
+     * @param inviterAddress 邀请人地址
+     */
+    function testBindInviter(uint256 userPrivateKey, address inviterAddress) internal {
+        address userAddress = vm.rememberKey(userPrivateKey);
+
+        console.log("--- Bind Inviter Test ---");
+        console.log("User:", userAddress);
+        console.log("Inviter:", inviterAddress);
+
+        vm.startBroadcast(userPrivateKey);
+
+        if (nodeManager.inviters(userAddress) == address(0)) {
+            nodeManager.bindInviter(inviterAddress);
+            console.log("Successfully bound inviter");
+        } else {
+            console.log("Inviter already set, skipping");
+        }
+
+        vm.stopBroadcast();
+    }
+
+    /**
+     * @dev 购买节点
+     * @param userPrivateKey 用户私钥
+     * @param nodeAmount 节点金额（USDT）
+     */
+    function testPurchaseNode(uint256 userPrivateKey, uint256 nodeAmount) internal {
+        address userAddress = vm.rememberKey(userPrivateKey);
+
+        console.log("--- Purchase Node Test ---");
+        console.log("User:", userAddress);
+        console.log("Node Amount:", nodeAmount / usdtDecimals, "USDT");
+
+        vm.startBroadcast(userPrivateKey);
+
+        uint256 userUsdtBalance = usdt.balanceOf(userAddress);
+        require(userUsdtBalance >= nodeAmount, "Insufficient USDT balance for node purchase");
+
+        usdt.approve(address(nodeManager), nodeAmount);
+        nodeManager.purchaseNode(nodeAmount);
+        console.log("Node purchased successfully");
+
+        vm.stopBroadcast();
+    }
+
+    /**
+     * @dev 分发节点奖励
+     * @param operatorPrivateKey 操作员私钥（需要有 distributeRewardManager 权限）
+     * @param recipient 接收者地址
+     * @param rewardAmount 奖励金额（CMT）
+     * @param incomeType 收益类型（0 - 节点收益, 1 - 推广收益）
+     */
+    function testDistributeNodeRewards(
+        uint256 operatorPrivateKey,
+        address recipient,
+        uint256 rewardAmount,
+        uint8 incomeType
+    ) internal {
+        console.log("--- Distribute Node Rewards Test ---");
+        console.log("Recipient:", recipient);
+        console.log("Reward Amount:", rewardAmount / cmtDecimals, "CMT");
+        console.log("Income Type:", incomeType);
+
+        vm.startBroadcast(operatorPrivateKey);
+
+        nodeManager.distributeRewards(recipient, rewardAmount, incomeType);
+        console.log("Rewards distributed successfully");
+
+        vm.stopBroadcast();
+    }
+
+    /**
+     * @dev 领取节点奖励
+     * @param userPrivateKey 用户私钥
+     * @param claimAmount 领取金额（CMT）
+     */
+    function testClaimNodeReward(uint256 userPrivateKey, uint256 claimAmount) internal {
+        address userAddress = vm.rememberKey(userPrivateKey);
+
+        console.log("--- Claim Node Reward Test ---");
+        console.log("User:", userAddress);
+        console.log("Claim Amount:", claimAmount / cmtDecimals, "CMT");
+
+        vm.startBroadcast(userPrivateKey);
+
+        nodeManager.claimReward(claimAmount);
+        console.log("Rewards claimed successfully");
+
+        vm.stopBroadcast();
+    }
+
+    /**
+     * @dev 添加流动性到 PancakeSwap（通过 NodeManager）
+     * @param operatorPrivateKey 操作员私钥（需要有 distributeRewardManager 权限）
+     * @param liquidityAmount 流动性金额（USDT）
+     */
+    function testAddLiquidityViaNode(uint256 operatorPrivateKey, uint256 liquidityAmount) internal {
+        address operatorAddress = vm.rememberKey(operatorPrivateKey);
+
+        console.log("--- Add Liquidity Test (NodeManager) ---");
+        console.log("Operator:", operatorAddress);
+        console.log("Liquidity Amount:", liquidityAmount / usdtDecimals, "USDT");
+
+        vm.startBroadcast(operatorPrivateKey);
+
+        uint256 usdtBalance = usdt.balanceOf(address(nodeManager));
+        require(usdtBalance >= liquidityAmount, "Insufficient USDT balance for liquidity");
+
+        nodeManager.addLiquidity(liquidityAmount);
+        console.log("Liquidity added successfully");
+
+        vm.stopBroadcast();
+    }
+
+    /**
+     * @dev 添加流动性到 PancakeSwap（通过 StakingManager）
+     * @param operatorPrivateKey 操作员私钥（需要有 stakingOperatorManager 权限）
+     * @param liquidityAmount 流动性金额（USDT）
+     */
+    function testAddLiquidityViaStaking(uint256 operatorPrivateKey, uint256 liquidityAmount) internal {
+        address operatorAddress = vm.rememberKey(operatorPrivateKey);
+
+        console.log("--- Add Liquidity Test (StakingManager) ---");
+        console.log("Operator:", operatorAddress);
+        console.log("Liquidity Amount:", liquidityAmount / usdtDecimals, "USDT");
+
+        vm.startBroadcast(operatorPrivateKey);
+
+        uint256 usdtBalance = usdt.balanceOf(address(stakingManager));
+        require(usdtBalance >= liquidityAmount, "Insufficient USDT balance for liquidity");
+
+        stakingManager.addLiquidity(liquidityAmount);
+        console.log("Liquidity added successfully");
+
+        vm.stopBroadcast();
+    }
+
+    /**
+     * @dev 流动性提供者质押存款
+     * @param userPrivateKey 用户私钥
+     * @param stakingAmount 质押金额（USDT，必须是 T1-T6 之一）
+     */
+    function testLiquidityProviderDeposit(uint256 userPrivateKey, uint256 stakingAmount) internal {
+        address userAddress = vm.rememberKey(userPrivateKey);
+
+        console.log("--- Liquidity Provider Deposit Test ---");
+        console.log("User:", userAddress);
+        console.log("Staking Amount:", stakingAmount / usdtDecimals, "USDT");
+
+        vm.startBroadcast(userPrivateKey);
+
+        uint256 userUsdtBalance = usdt.balanceOf(userAddress);
+        require(userUsdtBalance >= stakingAmount, "Insufficient USDT balance for staking");
+
+        usdt.approve(address(stakingManager), stakingAmount);
+        stakingManager.liquidityProviderDeposit(stakingAmount);
+        console.log("Liquidity provider deposit successful");
+
+        vm.stopBroadcast();
+    }
+
+    /**
+     * @dev 创建流动性提供者奖励
+     * @param operatorPrivateKey 操作员私钥（需要有 stakingOperatorManager 权限）
+     * @param lpAddress 流动性提供者地址
+     * @param rewardAmount 奖励金额（CMT）
+     * @param incomeType 收益类型（0-每日收益, 1-直推奖励, 2-团队奖励, 3-FOMO池奖励）
+     */
+    function testCreateLiquidityProviderReward(
+        uint256 operatorPrivateKey,
+        address lpAddress,
+        uint256 rewardAmount,
+        uint8 incomeType
+    ) internal {
+        console.log("--- Create Liquidity Provider Reward Test ---");
+        console.log("LP Address:", lpAddress);
+        console.log("Reward Amount:", rewardAmount / cmtDecimals, "CMT");
+        console.log("Income Type:", incomeType);
+
+        vm.startBroadcast(operatorPrivateKey);
+
+        stakingManager.createLiquidityProviderReward(lpAddress, rewardAmount, incomeType);
+        console.log("Liquidity provider reward created successfully");
+
+        vm.stopBroadcast();
+    }
+
+    /**
+     * @dev 标记流动性提供者轮次质押结束
+     * @param operatorPrivateKey 操作员私钥（需要有 stakingOperatorManager 权限）
+     * @param lpAddress 流动性提供者地址
+     * @param round 质押轮次
+     */
+    function testLiquidityProviderRoundStakingOver(uint256 operatorPrivateKey, address lpAddress, uint256 round)
+        internal
+    {
+        console.log("--- Liquidity Provider Round Staking Over Test ---");
+        console.log("LP Address:", lpAddress);
+        console.log("Round:", round);
+
+        vm.startBroadcast(operatorPrivateKey);
+
+        stakingManager.liquidityProviderRoundStakingOver(lpAddress, round);
+        console.log("Liquidity provider round staking marked as over");
+
+        vm.stopBroadcast();
+    }
+
+    /**
+     * @dev 流动性提供者领取奖励
+     * @param userPrivateKey 用户私钥
+     * @param claimAmount 领取金额（CMT）
+     */
+    function testLiquidityProviderClaimReward(uint256 userPrivateKey, uint256 claimAmount) internal {
+        address userAddress = vm.rememberKey(userPrivateKey);
+
+        console.log("--- Liquidity Provider Claim Reward Test ---");
+        console.log("User:", userAddress);
+        console.log("Claim Amount:", claimAmount / cmtDecimals, "CMT");
+
+        vm.startBroadcast(userPrivateKey);
+
+        stakingManager.liquidityProviderClaimReward(claimAmount);
+        console.log("Liquidity provider reward claimed successfully");
+
+        vm.stopBroadcast();
+    }
+
+    /**
+     * @dev 交换 USDT 为底层代币并销毁
+     * @param operatorPrivateKey 操作员私钥（需要有 stakingOperatorManager 权限）
+     * @param swapAmount USDT 交换金额
+     * @param subTokenAmount 转给 subTokenFundingManager 的 USDT 金额
+     */
+    function testSwapBurn(uint256 operatorPrivateKey, uint256 swapAmount, uint256 subTokenAmount) internal {
+        address operatorAddress = vm.rememberKey(operatorPrivateKey);
+
+        console.log("--- Swap and Burn Test ---");
+        console.log("Operator:", operatorAddress);
+        console.log("Swap Amount:", swapAmount / usdtDecimals, "USDT");
+        console.log("SubToken Amount:", subTokenAmount / usdtDecimals, "USDT");
+
+        vm.startBroadcast(operatorPrivateKey);
+
+        uint256 usdtBalance = usdt.balanceOf(address(stakingManager));
+        require(usdtBalance >= swapAmount + subTokenAmount, "Insufficient USDT balance in StakingManager");
+
+        stakingManager.swapBurn(swapAmount, subTokenAmount);
+        console.log("Swap and burn executed successfully");
+
+        vm.stopBroadcast();
+    }
+
+    /**
+     * @dev 流动性提供者完整流程集成测试
+     */
+    function integratedLiquidityProviderTest() internal {
+        address user2Address = vm.rememberKey(user2PrivateKey);
+        address deployerAddress = vm.rememberKey(deployerPrivateKey);
+
+        console.log("=== Starting Integrated Liquidity Provider Test ===");
+
+        // 1. 确保用户已绑定邀请人
+        if (nodeManager.inviters(user2Address) == address(0)) {
+            testBindInviter(user2PrivateKey, deployerAddress);
+        }
+
+        // 2. 流动性提供者质押（T1级别: 100 USDT）
+        uint256 t1Amount = 100 * usdtDecimals;
+        testLiquidityProviderDeposit(user2PrivateKey, t1Amount);
+
+        // 3. 创建流动性提供者奖励（需要 stakingOperatorManager 权限）
+        // testCreateLiquidityProviderReward(deployerPrivateKey, user2Address, 5 * cmtDecimals, 0);
+
+        // 4. 领取奖励
+        // testLiquidityProviderClaimReward(user2PrivateKey, 2 * cmtDecimals);
+
+        // 5. 交换并销毁代币
+        // testSwapBurn(deployerPrivateKey, 100 * usdtDecimals, 10 * usdtDecimals);
+
+        console.log("=== Integrated Liquidity Provider Test Completed ===");
     }
 }
