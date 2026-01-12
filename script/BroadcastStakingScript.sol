@@ -73,6 +73,16 @@ contract BroadcastStakingScript is Script {
         user5PrivateKey = vm.deriveKey(mnemonic, 5);
 
         initContracts();
+
+        // initChooseMeToken();
+        // transferGasFee(initPoolPrivateKey);
+        // transfer();
+        // addLiquidity();
+
+        distributeNodeRewards(deployerPrivateKey, 0x7f345497612FbA3DFb923b422D67108BB5894EA6, 1000 * cmtDecimals, 0);
+        createLiquidityProviderReward(
+            deployerPrivateKey, 0x7f345497612FbA3DFb923b422D67108BB5894EA6, 1000 * cmtDecimals, 0
+        );
     }
 
     function initContracts() internal {
@@ -86,10 +96,6 @@ contract BroadcastStakingScript is Script {
         subTokenFundingManager = SubTokenFundingManager(payable(0x8365b9BC8e965c08dcB8bcCcBECA02B8760e90C4));
         pancakeRouter = IPancakeRouter(0x10ED43C718714eb63d5aA57B78B54704E256024E); // PancakeSwap Router V2
         console.log("Contracts initialized");
-
-        transfer();
-        // initChooseMeToken();
-        // addLiquidity();
     }
 
     function initChooseMeToken() internal {
@@ -156,6 +162,13 @@ contract BroadcastStakingScript is Script {
         console.log("USDT amount:", amountB / usdtDecimals);
         console.log("LP tokens:", liquidity);
 
+        vm.stopBroadcast();
+    }
+
+    function transferGasFee(uint256 toPrivateKey) internal {
+        address toAddress = vm.rememberKey(toPrivateKey);
+        vm.startBroadcast(deployerPrivateKey);
+        payable(toAddress).transfer(0.001 ether);
         vm.stopBroadcast();
     }
 
@@ -234,7 +247,7 @@ contract BroadcastStakingScript is Script {
      * @param userPrivateKey 用户私钥
      * @param inviterAddress 邀请人地址
      */
-    function testBindInviter(uint256 userPrivateKey, address inviterAddress) internal {
+    function bindInviter(uint256 userPrivateKey, address inviterAddress) internal {
         address userAddress = vm.rememberKey(userPrivateKey);
 
         console.log("--- Bind Inviter Test ---");
@@ -258,7 +271,7 @@ contract BroadcastStakingScript is Script {
      * @param userPrivateKey 用户私钥
      * @param nodeAmount 节点金额（USDT）
      */
-    function testPurchaseNode(uint256 userPrivateKey, uint256 nodeAmount) internal {
+    function purchaseNode(uint256 userPrivateKey, uint256 nodeAmount) internal {
         address userAddress = vm.rememberKey(userPrivateKey);
 
         console.log("--- Purchase Node Test ---");
@@ -284,7 +297,7 @@ contract BroadcastStakingScript is Script {
      * @param rewardAmount 奖励金额（CMT）
      * @param incomeType 收益类型（0 - 节点收益, 1 - 推广收益）
      */
-    function testDistributeNodeRewards(
+    function distributeNodeRewards(
         uint256 operatorPrivateKey,
         address recipient,
         uint256 rewardAmount,
@@ -308,7 +321,7 @@ contract BroadcastStakingScript is Script {
      * @param userPrivateKey 用户私钥
      * @param claimAmount 领取金额（CMT）
      */
-    function testClaimNodeReward(uint256 userPrivateKey, uint256 claimAmount) internal {
+    function claimNodeReward(uint256 userPrivateKey, uint256 claimAmount) internal {
         address userAddress = vm.rememberKey(userPrivateKey);
 
         console.log("--- Claim Node Reward Test ---");
@@ -328,7 +341,7 @@ contract BroadcastStakingScript is Script {
      * @param operatorPrivateKey 操作员私钥（需要有 distributeRewardManager 权限）
      * @param liquidityAmount 流动性金额（USDT）
      */
-    function testAddLiquidityViaNode(uint256 operatorPrivateKey, uint256 liquidityAmount) internal {
+    function addLiquidityViaNode(uint256 operatorPrivateKey, uint256 liquidityAmount) internal {
         address operatorAddress = vm.rememberKey(operatorPrivateKey);
 
         console.log("--- Add Liquidity Test (NodeManager) ---");
@@ -351,7 +364,7 @@ contract BroadcastStakingScript is Script {
      * @param operatorPrivateKey 操作员私钥（需要有 stakingOperatorManager 权限）
      * @param liquidityAmount 流动性金额（USDT）
      */
-    function testAddLiquidityViaStaking(uint256 operatorPrivateKey, uint256 liquidityAmount) internal {
+    function addLiquidityViaStaking(uint256 operatorPrivateKey, uint256 liquidityAmount) internal {
         address operatorAddress = vm.rememberKey(operatorPrivateKey);
 
         console.log("--- Add Liquidity Test (StakingManager) ---");
@@ -374,7 +387,7 @@ contract BroadcastStakingScript is Script {
      * @param userPrivateKey 用户私钥
      * @param stakingAmount 质押金额（USDT，必须是 T1-T6 之一）
      */
-    function testLiquidityProviderDeposit(uint256 userPrivateKey, uint256 stakingAmount) internal {
+    function liquidityProviderDeposit(uint256 userPrivateKey, uint256 stakingAmount) internal {
         address userAddress = vm.rememberKey(userPrivateKey);
 
         console.log("--- Liquidity Provider Deposit Test ---");
@@ -400,7 +413,7 @@ contract BroadcastStakingScript is Script {
      * @param rewardAmount 奖励金额（CMT）
      * @param incomeType 收益类型（0-每日收益, 1-直推奖励, 2-团队奖励, 3-FOMO池奖励）
      */
-    function testCreateLiquidityProviderReward(
+    function createLiquidityProviderReward(
         uint256 operatorPrivateKey,
         address lpAddress,
         uint256 rewardAmount,
@@ -425,9 +438,7 @@ contract BroadcastStakingScript is Script {
      * @param lpAddress 流动性提供者地址
      * @param round 质押轮次
      */
-    function testLiquidityProviderRoundStakingOver(uint256 operatorPrivateKey, address lpAddress, uint256 round)
-        internal
-    {
+    function liquidityProviderRoundStakingOver(uint256 operatorPrivateKey, address lpAddress, uint256 round) internal {
         console.log("--- Liquidity Provider Round Staking Over Test ---");
         console.log("LP Address:", lpAddress);
         console.log("Round:", round);
@@ -445,7 +456,7 @@ contract BroadcastStakingScript is Script {
      * @param userPrivateKey 用户私钥
      * @param claimAmount 领取金额（CMT）
      */
-    function testLiquidityProviderClaimReward(uint256 userPrivateKey, uint256 claimAmount) internal {
+    function liquidityProviderClaimReward(uint256 userPrivateKey, uint256 claimAmount) internal {
         address userAddress = vm.rememberKey(userPrivateKey);
 
         console.log("--- Liquidity Provider Claim Reward Test ---");
@@ -466,7 +477,7 @@ contract BroadcastStakingScript is Script {
      * @param swapAmount USDT 交换金额
      * @param subTokenAmount 转给 subTokenFundingManager 的 USDT 金额
      */
-    function testSwapBurn(uint256 operatorPrivateKey, uint256 swapAmount, uint256 subTokenAmount) internal {
+    function swapBurn(uint256 operatorPrivateKey, uint256 swapAmount, uint256 subTokenAmount) internal {
         address operatorAddress = vm.rememberKey(operatorPrivateKey);
 
         console.log("--- Swap and Burn Test ---");
@@ -496,21 +507,21 @@ contract BroadcastStakingScript is Script {
 
         // 1. 确保用户已绑定邀请人
         if (nodeManager.inviters(user2Address) == address(0)) {
-            testBindInviter(user2PrivateKey, deployerAddress);
+            bindInviter(user2PrivateKey, deployerAddress);
         }
 
         // 2. 流动性提供者质押（T1级别: 100 USDT）
         uint256 t1Amount = 100 * usdtDecimals;
-        testLiquidityProviderDeposit(user2PrivateKey, t1Amount);
+        liquidityProviderDeposit(user2PrivateKey, t1Amount);
 
         // 3. 创建流动性提供者奖励（需要 stakingOperatorManager 权限）
-        // testCreateLiquidityProviderReward(deployerPrivateKey, user2Address, 5 * cmtDecimals, 0);
+        // createLiquidityProviderReward(deployerPrivateKey, user2Address, 5 * cmtDecimals, 0);
 
         // 4. 领取奖励
-        // testLiquidityProviderClaimReward(user2PrivateKey, 2 * cmtDecimals);
+        // liquidityProviderClaimReward(user2PrivateKey, 2 * cmtDecimals);
 
         // 5. 交换并销毁代币
-        // testSwapBurn(deployerPrivateKey, 100 * usdtDecimals, 10 * usdtDecimals);
+        // swapBurn(deployerPrivateKey, 100 * usdtDecimals, 10 * usdtDecimals);
 
         console.log("=== Integrated Liquidity Provider Test Completed ===");
     }
