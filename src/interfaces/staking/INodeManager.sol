@@ -33,6 +33,8 @@ interface INodeManager {
         bool isOutOf;
     }
 
+    event ClaimReward(address indexed recipient, uint256 withdrawAmount, uint256 toPredictionAmount);
+
     struct BatchReward {
         address recipient;
         uint256 amount;

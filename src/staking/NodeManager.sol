@@ -136,6 +136,10 @@ contract NodeManager is Initializable, OwnableUpgradeable, PausableUpgradeable, 
 
         uint256 canWithdrawAmount = amount - toEventPredictionAmount;
         daoRewardManager.withdraw(msg.sender, canWithdrawAmount);
+
+        emit ClaimReward({
+            recipient: msg.sender, withdrawAmount: canWithdrawAmount, toPredictionAmount: toEventPredictionAmount
+        });
     }
 
     /**
