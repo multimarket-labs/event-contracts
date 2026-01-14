@@ -2,26 +2,33 @@
 pragma solidity ^0.8.20;
 
 interface IFundingPod {
-    event DepositToken(
-        address indexed tokenAddress,
-        address indexed sender,
-        uint256 amount
-    );
+    // Events
+    event Deposit(address indexed user, address indexed token, uint256 amount);
+    event Withdraw(address indexed user, address indexed token, uint256 amount);
+    event TransferToEvent(address indexed eventPod, address indexed token, address indexed user, uint256 amount);
+    event ReceiveFromEvent(address indexed eventPod, address indexed token, address indexed user, uint256 amount);
+    event EventPodUpdated(address indexed oldEventPod, address indexed newEventPod);
 
-    event WithdrawToken(
-        address indexed tokenAddress,
-        address sender,
-        address withdrawAddress,
-        uint256 amount
-    );
+    // User functions
+    function deposit(address token, uint256 amount) external payable;
+    function withdraw(address token, uint256 amount) external;
+    function getUserBalance(address user, address token) external view returns (uint256);
 
-    event SetSupportTokenEvent(address indexed token, bool isSupport, uint256 chainId);
+    // EventPod functions (called by EventPod)
+    function transferToEvent(address token, address user, uint256 amount) external;
+    function receiveFromEvent(address token, address user, uint256 amount) external payable;
 
-    error LessThanZero(uint256 amount);
-    error TokenIsNotSupported(address ERC20Address);
+    // Admin functions (called by FundingManager)
+    function addSupportToken(address token) external;
+    function removeSupportToken(address token) external;
+    function setEventPod(address _eventPod) external;
 
-    function deposit(address tokenAddress, uint256 amount) external;
-    function withdraw(address payable withdrawAddress, uint256 amount) external;
+    // View functions
+    function isSupportToken(address token) external view returns (bool);
+    function getSupportTokens() external view returns (address[] memory);
+    function getTokenBalance(address token) external view returns (uint256);
 
-    function setSupportERC20Token(address ERC20Address, bool isValid) external;
+    // Pausable functions
+    function pause() external;
+    function unpause() external;
 }

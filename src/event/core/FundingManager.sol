@@ -6,47 +6,99 @@ import "@openzeppelin-upgrades/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgrades/contracts/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
+import "../common/BaseManager.sol";
 import "./FundingManagerStorage.sol";
+import "../pod/FundingPod.sol";
 
-contract FundingManager is Initializable, OwnableUpgradeable, PausableUpgradeable, FundingManagerStorage  {
+contract FundingManager is BaseManager, FundingManagerStorage {
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.AddressSet;
 
-    modifier onlyFundingPodWhitelister() {
-        require(
-            msg.sender == fundingPodWhitelister,
-            "StrategyManager.onlyStrategyWhitelister: not the strategyWhitelister"
-        );
-        _;
-    }
+    // Errors
+    error InvalidPod();
+    error InvalidAddress();
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
-    function initialize(address _initialOwner, address _fundingPodWhitelister) external initializer {
-        __Ownable_init(_initialOwner);
-        fundingPodWhitelister = _fundingPodWhitelister;
+    function initialize(address _owner) external initializer {
+        if (_owner == address(0)) revert InvalidAddress();
+
+        __Ownable_init(_owner);
     }
 
-    function depositEthIntoPod(IFundingPod fundingPod) external payable returns(bool) {
-        return true;
+    /**
+     * @notice Add a supported token to a funding pod
+     * @param pod The funding pod address
+     * @param token The token address to add
+     */
+    function addSupportToken(address pod, address token) external onlyOwner onlyPod(pod) {
+        FundingPod(payable(pod)).addSupportToken(token);
     }
 
-    function depositErc20IntoPod(IFundingPod fundingPod, IERC20 tokenAddress, uint256 amount) external {
-        // todo：验证 Pod 是否在白名单
-
-        tokenAddress.safeTransferFrom(msg.sender, address(fundingPod), amount);
-
-        fundingPod.deposit(address(tokenAddress), amount);
+    /**
+     * @notice Remove a supported token from a funding pod
+     * @param pod The funding pod address
+     * @param token The token address to remove
+     */
+    function removeSupportToken(address pod, address token) external onlyOwner onlyPod(pod) {
+        FundingPod(payable(pod)).removeSupportToken(token);
     }
 
-
-    function addStrategiesToDepositWhitelist(IFundingPod[] calldata fundingPodsToWhitelist, bool[] calldata thirdPartyTransfersForbiddenValues) external onlyFundingPodWhitelister {
-
+    /**
+     * @notice Set the event pod address for a funding pod
+     * @param pod The funding pod address
+     * @param _eventPod The event pod address
+     */
+    function setEventPod(address pod, address _eventPod) external onlyOwner onlyPod(pod) {
+        FundingPod(payable(pod)).setEventPod(_eventPod);
     }
 
-    function removeStrategiesFromDepositWhitelist(IFundingPod[] calldata fundingPodsToRemoveFromWhitelist) external onlyFundingPodWhitelister {
+    /**
+     * @notice Add an authorized caller
+     * @param caller The caller address to authorize
+     */
+    function addAuthorizedCaller(address caller) external onlyOwner {
+        if (caller == address(0)) revert InvalidAddress();
 
+        if (!authorizedCallers.contains(caller)) {
+            authorizedCallers.add(caller);
+            emit AuthorizedCallerAdded(caller);
+        }
     }
+
+    /**
+     * @notice Remove an authorized caller
+     * @param caller The caller address to remove
+     */
+    function removeAuthorizedCaller(address caller) external onlyOwner {
+        if (authorizedCallers.contains(caller)) {
+            authorizedCallers.remove(caller);
+            emit AuthorizedCallerRemoved(caller);
+        }
+    }
+
+    /**
+     * @notice Check if an address is an authorized caller
+     * @param caller The address to check
+     * @return Whether the address is authorized
+     */
+    function isAuthorizedCaller(address caller) external view returns (bool) {
+        return authorizedCallers.contains(caller);
+    }
+
+    /**
+     * @notice Get all authorized callers
+     * @return Array of authorized caller addresses
+     */
+    function getAuthorizedCallers() external view returns (address[] memory) {
+        return authorizedCallers.values();
+    }
+
+    // Required to receive ETH
+    receive() external payable {}
 }
