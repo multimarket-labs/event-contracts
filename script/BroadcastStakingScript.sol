@@ -432,7 +432,7 @@ contract BroadcastStakingScript is Script {
 
         vm.startBroadcast(operatorPrivateKey);
 
-        stakingManager.createLiquidityProviderReward(lpAddress, rewardAmount, rewardAmount, incomeType);
+        stakingManager.createLiquidityProviderReward(lpAddress, 0, rewardAmount, rewardAmount, incomeType);
         console.log("Liquidity provider reward created successfully");
 
         vm.stopBroadcast();
