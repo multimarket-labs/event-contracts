@@ -141,7 +141,7 @@ contract FundingPod is Initializable, OwnableUpgradeable, PausableUpgradeable, F
      * @param token The token address
      * @param user The user address
      * @param amount The principal amount returned
-     * TODO 如何减少多次函数调用
+     * TODO How to reduce multiple function calls
      */
     function receiveFromEvent(address token, address user, uint256 amount)
         external
