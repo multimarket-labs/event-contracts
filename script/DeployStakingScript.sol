@@ -254,8 +254,8 @@ contract DeployStakingScript is Script {
         address proxyAirdropManager = vm.parseJsonAddress(json, ".proxyAirdropManager");
         address proxySubTokenFundingManager = vm.parseJsonAddress(json, ".proxySubTokenFundingManager");
 
-        ChooseMeToken chooseMeToken = ChooseMeToken(proxyChooseMeToken);
-        if (chooseMeToken.balanceOf(address(daoRewardManager)) > 0) return;
+        ChooseMeToken _chooseMeToken = ChooseMeToken(proxyChooseMeToken);
+        if (_chooseMeToken.balanceOf(address(proxyDaoRewardManager)) > 0) return;
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
 
         vm.startBroadcast(deployerPrivateKey);
@@ -275,13 +275,13 @@ contract DeployStakingScript is Script {
         address[] memory ecosystemPools = new address[](1);
         ecosystemPools[0] = vm.rememberKey(deployerPrivateKey);
 
-        chooseMeToken.setPoolAddress(pools, marketingPools, ecosystemPools);
+        _chooseMeToken.setPoolAddress(pools, marketingPools, ecosystemPools);
         console.log("Pool addresses set");
 
         // Execute pool allocation
-        chooseMeToken.poolAllocate();
+        _chooseMeToken.poolAllocate();
         console.log("Pool allocation completed");
-        console.log("Total Supply:", chooseMeToken.totalSupply() / 1e6, "CMT");
+        console.log("Total Supply:", _chooseMeToken.totalSupply() / 1e6, "CMT");
 
         vm.stopBroadcast();
     }
