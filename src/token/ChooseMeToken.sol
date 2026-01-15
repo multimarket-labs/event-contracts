@@ -187,8 +187,7 @@ contract ChooseMeToken is
 
         uint256 uAmount = SwapHelper.swapV2(V2_ROUTER, address(this), USDT, totalSlipage, currencyDistributor);
 
-        IERC20(USDT)
-            .transferFrom(currencyDistributor, cmPool.marketingDevelopmentPool, uAmount * marketFee / totalSlipage);
+        IERC20(USDT).transferFrom(currencyDistributor, cmPool.marketingPool, uAmount * marketFee / totalSlipage);
         IERC20(USDT).transferFrom(currencyDistributor, cmPool.techRewardsPool, uAmount * techFee / totalSlipage);
         IERC20(USDT).transferFrom(currencyDistributor, cmPool.subTokenPool, uAmount * subFee / totalSlipage);
 
@@ -233,8 +232,8 @@ contract ChooseMeToken is
      */
     function isFromSpecial(address from) internal view returns (bool) {
         return from == cmPool.nodePool || from == cmPool.daoRewardPool || from == cmPool.techRewardsPool
-            || from == cmPool.ecosystemPool || from == cmPool.foundingStrategyPool
-            || from == cmPool.marketingDevelopmentPool || from == cmPool.subTokenPool;
+            || from == cmPool.foundingStrategyPool || from == cmPool.marketingPool || from == cmPool.subTokenPool
+            || EnumerableSet.contains(marketingPools, from) || EnumerableSet.contains(ecosystemPools, from);
     }
 
     /**
@@ -313,10 +312,20 @@ contract ChooseMeToken is
      * @dev Set all pool addresses
      * @param _pool Struct containing all pool addresses
      */
-    function setPoolAddress(ChooseMePool memory _pool) external onlyOwner {
+    function setPoolAddress(
+        ChooseMePool memory _pool,
+        address[] memory _marketingDevelopmentPools,
+        address[] memory _ecosystemPools
+    ) external onlyOwner {
         _beforeAllocation();
         _beforePoolAddress(_pool);
         cmPool = _pool;
+        for (uint256 i = 0; i < _marketingDevelopmentPools.length; i++) {
+            EnumerableSet.add(marketingPools, _marketingDevelopmentPools[i]);
+        }
+        for (uint256 i = 0; i < _ecosystemPools.length; i++) {
+            EnumerableSet.add(ecosystemPools, _ecosystemPools[i]);
+        }
         emit SetPoolAddress(_pool);
     }
 
@@ -326,13 +335,23 @@ contract ChooseMeToken is
      */
     function poolAllocate() external onlyOwner {
         _beforeAllocation();
-        _mint(cmPool.nodePool, (MaxTotalSupply * 2) / 10); // 20% of total supply
-        _mint(cmPool.daoRewardPool, (MaxTotalSupply * 6) / 10); // 60% of total supply
+        _mint(cmPool.nodePool, (MaxTotalSupply * 20) / 100); // 20% of total supply
+        _mint(cmPool.daoRewardPool, (MaxTotalSupply * 60) / 100); // 60% of total supply
         _mint(cmPool.airdropPool, (MaxTotalSupply * 6) / 100); // 6% of total supply
         _mint(cmPool.techRewardsPool, (MaxTotalSupply * 5) / 100); // 5% of total supply
-        _mint(cmPool.ecosystemPool, (MaxTotalSupply * 4) / 100); // 4% of total supply
         _mint(cmPool.foundingStrategyPool, (MaxTotalSupply * 2) / 100); // 2% of total supply
-        _mint(cmPool.marketingDevelopmentPool, (MaxTotalSupply * 3) / 100); // 3% of total supply
+        // 4% of total supply
+        address[] memory ecosystemPoolsArray = EnumerableSet.values(ecosystemPools);
+        uint256 ecosystemPoolEvery = (MaxTotalSupply * 4) / 100 / ecosystemPoolsArray.length;
+        for (uint256 index = 0; index < ecosystemPoolsArray.length; index++) {
+            _mint(ecosystemPoolsArray[index], ecosystemPoolEvery);
+        }
+        // 3% of total supply
+        address[] memory marketingPoolsArray = EnumerableSet.values(marketingPools);
+        uint256 marketingDevelopmentPoolEvery = (MaxTotalSupply * 3) / 100 / marketingPoolsArray.length;
+        for (uint256 index = 0; index < marketingPoolsArray.length; index++) {
+            _mint(marketingPoolsArray[index], marketingDevelopmentPoolEvery);
+        }
         isAllocation = true;
     }
 
@@ -378,15 +397,11 @@ contract ChooseMeToken is
             "ChooseMeToken _beforeAllocation:Missing allocate techRewardsPool address"
         );
         require(
-            _pool.ecosystemPool != address(0), "ChooseMeToken _beforeAllocation:Missing allocate EcosystemPool address"
-        );
-        require(
             _pool.foundingStrategyPool != address(0),
             "ChooseMeToken _beforeAllocation:Missing allocate foundingStrategyPool address"
         );
         require(
-            _pool.marketingDevelopmentPool != address(0),
-            "ChooseMeToken _beforeAllocation:Missing allocate marketingDevelopmentPool address"
+            _pool.marketingPool != address(0), "ChooseMeToken _beforeAllocation:Missing allocate marketingPool address"
         );
     }
 

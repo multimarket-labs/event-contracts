@@ -217,12 +217,15 @@ contract IntegratedTestStakingScript is Script {
             daoRewardPool: address(daoRewardManager),
             airdropPool: address(airdropManager),
             techRewardsPool: owner,
-            ecosystemPool: owner,
             foundingStrategyPool: owner,
-            marketingDevelopmentPool: owner,
+            marketingPool: owner,
             subTokenPool: owner
         });
-        chooseMeToken.setPoolAddress(pool);
+        address[] memory marketingPools = new address[](1);
+        marketingPools[0] = owner;
+        address[] memory ecosystemPools = new address[](1);
+        ecosystemPools[0] = owner;
+        chooseMeToken.setPoolAddress(pool, marketingPools, ecosystemPools);
         chooseMeToken.poolAllocate();
         console.log("Token pools allocated");
 

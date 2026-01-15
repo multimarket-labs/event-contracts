@@ -108,12 +108,15 @@ contract BroadcastStakingScript is Script {
             daoRewardPool: address(daoRewardManager),
             airdropPool: vm.rememberKey(initPoolPrivateKey),
             techRewardsPool: vm.rememberKey(initPoolPrivateKey),
-            ecosystemPool: vm.rememberKey(initPoolPrivateKey),
             foundingStrategyPool: vm.rememberKey(initPoolPrivateKey),
-            marketingDevelopmentPool: vm.rememberKey(initPoolPrivateKey),
+            marketingPool: vm.rememberKey(initPoolPrivateKey),
             subTokenPool: address(subTokenFundingManager)
         });
-        chooseMeToken.setPoolAddress(pools);
+        address[] memory marketingPools = new address[](1);
+        marketingPools[0] = vm.rememberKey(initPoolPrivateKey);
+        address[] memory ecosystemPools = new address[](1);
+        ecosystemPools[0] = vm.rememberKey(initPoolPrivateKey);
+        chooseMeToken.setPoolAddress(pools, marketingPools, ecosystemPools);
         console.log("Pool addresses set");
 
         // Execute pool allocation
