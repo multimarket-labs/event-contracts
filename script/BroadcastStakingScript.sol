@@ -159,25 +159,25 @@ contract BroadcastStakingScript is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // 设置添加流动性的数量（可以根据需要调整）
+        // Set liquidity amounts (can be adjusted as needed)
         uint256 cmtAmount = 1_000_000 * cmtDecimals;
         uint256 usdtAmount = 100_000 * usdtDecimals;
 
-        // 批准代币给路由器
+        // Approve tokens to router
         chooseMeToken.approve(address(pancakeRouter), cmtAmount);
         usdt.approve(address(pancakeRouter), usdtAmount);
         console.log("Tokens approved for PancakeSwap Router");
 
-        // 添加流动性
+        // Add liquidity
         (uint256 amountA, uint256 amountB, uint256 liquidity) = pancakeRouter.addLiquidity(
             address(chooseMeToken),
             address(usdt),
             cmtAmount,
             usdtAmount,
-            0, // amountAMin (可以设置滑点保护)
-            0, // amountBMin (可以设置滑点保护)
-            deployer, // LP tokens 接收地址
-            block.timestamp + 300 // 5分钟后过期
+            0, // amountAMin (slippage protection can be set)
+            0, // amountBMin (slippage protection can be set)
+            deployer, // LP tokens receiving address
+            block.timestamp + 300 // Expires in 5 minutes
         );
 
         console.log("Liquidity added successfully");
@@ -217,15 +217,15 @@ contract BroadcastStakingScript is Script {
         address initPoolAddress = vm.rememberKey(initPoolPrivateKey);
         address deployerAddress = vm.rememberKey(deployerPrivateKey);
 
-        // 步骤 1: 从 initPoolPrivateKey 将 token0 转移到用户地址
+        // Step 1: Transfer token0 from initPoolPrivateKey to user address
         vm.startBroadcast(initPoolPrivateKey);
         ERC20(token0).transfer(userAddress, amount0);
         console.log("Transferred token0 to user address");
         console.log("Amount:", amount0);
         vm.stopBroadcast();
 
-        // 步骤 2: 预估交易 gas 费用
-        uint256 estimatedGas = 300000; // 预估的 gas limit
+        // Step 2: Estimate transaction gas fee
+        uint256 estimatedGas = 300000; // Estimated gas limit
         uint256 gasPrice = tx.gasprice;
         uint256 gasCost = estimatedGas * gasPrice;
 
@@ -233,33 +233,33 @@ contract BroadcastStakingScript is Script {
         console.log("Gas price:", gasPrice);
         console.log("Estimated gas cost:", gasCost);
 
-        // 步骤 3: 从 deployerPrivateKey 转移 gas 费用（BNB）到用户地址
+        // Step 3: Transfer gas fee (BNB) from deployerPrivateKey to user address
         vm.startBroadcast(deployerPrivateKey);
         payable(userAddress).transfer(gasCost);
         console.log("Transferred gas fee to user address");
         console.log("Gas fee amount (BNB):", gasCost);
         vm.stopBroadcast();
 
-        // 步骤 4: 使用用户私钥执行 swap 交易
+        // Step 4: Execute swap transaction using user private key
         vm.startBroadcast(userPrivateKey);
 
-        // 批准 token0 给路由器
+        // Approve token0 to router
         ERC20(token0).approve(address(pancakeRouter), amount0);
         console.log("Token0 approved for router");
 
-        // 准备 swap 路径
+        // Prepare swap path
         address[] memory path = new address[](2);
         path[0] = token0;
         path[1] = token1;
 
-        // 执行 swap
+        // Execute swap
         uint256[] memory amounts = IPancakeV2Router(address(pancakeRouter))
             .swapExactTokensForTokens(
                 amount0,
-                0, // amountOutMin (可以设置滑点保护)
+                0, // amountOutMin (slippage protection can be set)
                 path,
                 userAddress,
-                block.timestamp + 300 // 5分钟后过期
+                block.timestamp + 300 // Expires in 5 minutes
             );
 
         console.log("Swap executed successfully");
@@ -270,9 +270,9 @@ contract BroadcastStakingScript is Script {
     }
 
     /**
-     * @dev 绑定邀请人
-     * @param userPrivateKey 用户私钥
-     * @param inviterAddress 邀请人地址
+     * @dev Bind inviter
+     * @param userPrivateKey User private key
+     * @param inviterAddress Inviter address
      */
     function bindInviter(uint256 userPrivateKey, address inviterAddress) internal {
         address userAddress = vm.rememberKey(userPrivateKey);
@@ -294,9 +294,9 @@ contract BroadcastStakingScript is Script {
     }
 
     /**
-     * @dev 购买节点
-     * @param userPrivateKey 用户私钥
-     * @param nodeAmount 节点金额（USDT）
+     * @dev Purchase node
+     * @param userPrivateKey User private key
+     * @param nodeAmount Node amount (USDT)
      */
     function purchaseNode(uint256 userPrivateKey, uint256 nodeAmount) internal {
         address userAddress = vm.rememberKey(userPrivateKey);
@@ -318,12 +318,12 @@ contract BroadcastStakingScript is Script {
     }
 
     /**
-     * @dev 分发节点奖励
-     * @param operatorPrivateKey 操作员私钥（需要有 distributeRewardManager 权限）
-     * @param recipient 接收者地址
-     * @param tokenAmount 奖励金额（CMT）
-     * @param usdtAmount 奖励金额（USDT）
-     * @param incomeType 收益类型（0 - 节点收益, 1 - 推广收益）
+     * @dev Distribute node rewards
+     * @param operatorPrivateKey Operator private key (requires distributeRewardManager permission)
+     * @param recipient Recipient address
+     * @param tokenAmount Reward amount (CMT)
+     * @param usdtAmount Reward amount (USDT)
+     * @param incomeType Income type (0 - Node income, 1 - Promotion income)
      */
     function distributeNodeRewards(
         uint256 operatorPrivateKey,
@@ -346,8 +346,8 @@ contract BroadcastStakingScript is Script {
     }
 
     /**
-     * @dev 领取节点奖励
-     * @param userPrivateKey 用户私钥
+     * @dev Claim node reward
+     * @param userPrivateKey User private key
      * @param claimAmount 领取金额（CMT）
      */
     function claimNodeReward(uint256 userPrivateKey, uint256 claimAmount) internal {
@@ -457,25 +457,6 @@ contract BroadcastStakingScript is Script {
 
         stakingManager.createLiquidityProviderReward(lpAddress, 0, rewardAmount, rewardAmount, incomeType);
         console.log("Liquidity provider reward created successfully");
-
-        vm.stopBroadcast();
-    }
-
-    /**
-     * @dev 标记流动性提供者轮次质押结束
-     * @param operatorPrivateKey 操作员私钥（需要有 stakingOperatorManager 权限）
-     * @param lpAddress 流动性提供者地址
-     * @param round 质押轮次
-     */
-    function liquidityProviderRoundStakingOver(uint256 operatorPrivateKey, address lpAddress, uint256 round) internal {
-        console.log("--- Liquidity Provider Round Staking Over Test ---");
-        console.log("LP Address:", lpAddress);
-        console.log("Round:", round);
-
-        vm.startBroadcast(operatorPrivateKey);
-
-        stakingManager.liquidityProviderRoundStakingOver(lpAddress, round);
-        console.log("Liquidity provider round staking marked as over");
 
         vm.stopBroadcast();
     }

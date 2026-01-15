@@ -215,8 +215,6 @@ contract TestStakingManager is Test {
 
     event lpClaimReward(address indexed liquidityProvider, uint256 withdrawAmount, uint256 toPredictionAmount);
 
-    event lpRoundStakingOver(address indexed liquidityProvider, uint256 endBlock, uint256 endTime);
-
     event outOfAchieveReturnsNodeExit(
         address indexed liquidityProvider, uint256 round, uint256 totalReward, uint256 blockNumber
     );
@@ -326,8 +324,7 @@ contract TestStakingManager is Test {
             uint256 rewardUAmount,
             uint256 rewardAmount,
             uint256 startTime,
-            uint256 endTime,
-            uint8 stakingStatus
+            uint256 endTime
         ) = stakingManager.currentLiquidityProvider(user1, 0);
 
         assertEq(liquidityProvider, user1);
@@ -335,7 +332,6 @@ contract TestStakingManager is Test {
         assertEq(amount, T1_STAKING);
         assertEq(startTime, block.timestamp);
         assertEq(endTime, block.timestamp + 172800);
-        assertEq(stakingStatus, 0);
 
         // Verify total staking reward
         (address lpAddr, uint256 totalStaking, uint256 totalReward,,,,,,) = stakingManager.totalLpStakingReward(user1);
@@ -367,7 +363,7 @@ contract TestStakingManager is Test {
             usdt.approve(address(stakingManager), amounts[i]);
             stakingManager.liquidityProviderDeposit(amounts[i]);
 
-            (, uint8 stakingType, uint256 amount,,,,,) = stakingManager.currentLiquidityProvider(testUser, 0);
+            (, uint8 stakingType, uint256 amount,,,,) = stakingManager.currentLiquidityProvider(testUser, 0);
             assertEq(stakingType, uint8(i));
             assertEq(amount, amounts[i]);
             vm.stopPrank();
@@ -678,68 +674,6 @@ contract TestStakingManager is Test {
         // Try to create another reward - should revert
         vm.expectRevert("StakingManager.createLiquidityProviderReward: already reached limit");
         stakingManager.createLiquidityProviderReward(user1, 0, 10 * 10 ** 18, 100 * 10 ** 18, 0);
-        vm.stopPrank();
-    }
-
-    // ==================== Liquidity Provider Round Staking Over Tests ====================
-
-    function testLiquidityProviderRoundStakingOver() public {
-        vm.prank(owner);
-        nodeManager.setInviter(user1, user2);
-
-        vm.startPrank(user1);
-        usdt.approve(address(stakingManager), T1_STAKING);
-        stakingManager.liquidityProviderDeposit(T1_STAKING);
-        vm.stopPrank();
-
-        // Fast forward time past staking period (172800 seconds)
-        vm.warp(block.timestamp + 172801);
-
-        vm.startPrank(operatorManager);
-        vm.expectEmit(true, false, false, true);
-        emit lpRoundStakingOver(user1, block.number, block.timestamp);
-
-        stakingManager.liquidityProviderRoundStakingOver(user1, 0);
-        vm.stopPrank();
-
-        (,,,,,, uint256 endTime, uint8 stakingStatus) = stakingManager.currentLiquidityProvider(user1, 0);
-        assertEq(stakingStatus, 1);
-    }
-
-    function testLiquidityProviderRoundStakingOver_RevertZeroAddress() public {
-        vm.startPrank(operatorManager);
-        vm.expectRevert("StakingManager.liquidityProviderRoundStakingOver: lp address is zero");
-        stakingManager.liquidityProviderRoundStakingOver(address(0), 0);
-        vm.stopPrank();
-    }
-
-    function testLiquidityProviderRoundStakingOver_RevertUnderStakingPeriod() public {
-        vm.prank(owner);
-        nodeManager.setInviter(user1, user2);
-
-        vm.startPrank(user1);
-        usdt.approve(address(stakingManager), T1_STAKING);
-        stakingManager.liquidityProviderDeposit(T1_STAKING);
-        vm.stopPrank();
-
-        vm.startPrank(operatorManager);
-        vm.expectRevert(abi.encodeWithSelector(IStakingManager.LpUnderStakingPeriodError.selector, user1, 0));
-        stakingManager.liquidityProviderRoundStakingOver(user1, 0);
-        vm.stopPrank();
-    }
-
-    function testLiquidityProviderRoundStakingOver_RevertOnlyOperator() public {
-        vm.prank(owner);
-        nodeManager.setInviter(user1, user2);
-
-        vm.startPrank(user1);
-        usdt.approve(address(stakingManager), T1_STAKING);
-        stakingManager.liquidityProviderDeposit(T1_STAKING);
-
-        vm.warp(block.timestamp + 172801);
-
-        vm.expectRevert("onlyRewardDistributionManager");
-        stakingManager.liquidityProviderRoundStakingOver(user1, 0);
         vm.stopPrank();
     }
 

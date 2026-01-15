@@ -19,15 +19,15 @@ import {IPancakeV2Pair} from "../src/interfaces/staking/pancake/IPancakeV2Pair.s
 /**
  * forge script IntegratedTestChooseMeTokenTrading --rpc-url https://bsc-dataseed.binance.org
  * @title IntegratedTestChooseMeTokenTrading
- * @notice 集成测试 ChooseMeToken 的交易滑点和盈利税功能
- * @dev 测试场景：
- * 1. 交易滑点测试 (3% 总费用)
- *    - 买入滑点: 0.5% node + 0.5% cluster + 0.5% market + 1% tech + 0.5% subToken
- *    - 卖出滑点: 同上
- * 2. 盈利税测试
- *    - 盈利时卖出: 8% node + 6% cluster + 4% market + 4% tech + 4% subToken (总共26%)
- *    - 亏损时卖出: 仅收取交易滑点，无盈利税
- * 3. 白名单测试: 白名单地址免除所有手续费
+ * @notice Integration test for ChooseMeToken trading slippage and profit tax functionality
+ * @dev Test scenarios:
+ * 1. Trading slippage test (3% total fee)
+ *    - Buy slippage: 0.5% node + 0.5% cluster + 0.5% market + 1% tech + 0.5% subToken
+ *    - Sell slippage: Same as above
+ * 2. Profit tax test
+ *    - Sell with profit: 8% node + 6% cluster + 4% market + 4% tech + 4% subToken (total 26%)
+ *    - Sell with loss: Only trading slippage, no profit tax
+ * 3. Whitelist test: Whitelist addresses are exempt from all fees
  */
 contract IntegratedTestChooseMeTokenTrading is Script {
     // BSC Mainnet addresses

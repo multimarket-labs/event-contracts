@@ -98,8 +98,7 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
             rewardUAmount: 0,
             rewardAmount: 0,
             startTime: block.timestamp,
-            endTime: endStakingTimeDuration,
-            stakingStatus: 0 // 0: staking; 1: endStaking
+            endTime: endStakingTimeDuration
         });
 
         currentLiquidityProvider[msg.sender][lpStakingRound[msg.sender]] = lpInfo;
@@ -213,27 +212,6 @@ contract StakingManager is Initializable, OwnableUpgradeable, PausableUpgradeabl
                 batchRewards[i].incomeType
             );
         }
-    }
-
-    /**
-     * @dev Mark liquidity provider round staking as ended (only staking operator manager can call)
-     * @param lpAddress Liquidity provider address
-     * @param lpStakingRound Staking round
-     */
-    function liquidityProviderRoundStakingOver(address lpAddress, uint256 lpStakingRound)
-        external
-        onlyStakingOperatorManager
-    {
-        require(lpAddress != address(0), "StakingManager.liquidityProviderRoundStakingOver: lp address is zero");
-
-        LiquidityProviderInfo storage lpInfo = currentLiquidityProvider[lpAddress][lpStakingRound];
-        if (lpInfo.endTime > block.timestamp) {
-            revert LpUnderStakingPeriodError(lpAddress, lpStakingRound);
-        }
-
-        lpInfo.stakingStatus = 1;
-
-        emit lpRoundStakingOver({liquidityProvider: lpAddress, endBlock: block.number, endTime: block.timestamp});
     }
 
     /**

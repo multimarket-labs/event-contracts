@@ -39,7 +39,6 @@ interface IStakingManager {
         uint256 rewardAmount;
         uint256 startTime;
         uint256 endTime;
-        uint8 stakingStatus;
     }
 
     struct LiquidityProviderStakingReward {
@@ -81,8 +80,6 @@ interface IStakingManager {
         uint8 incomeType
     );
 
-    event lpRoundStakingOver(address indexed liquidityProvider, uint256 endBlock, uint256 endTime);
-
     event lpClaimReward(address indexed liquidityProvider, uint256 withdrawAmount, uint256 toPredictionAmount);
 
     event outOfAchieveReturnsNodeExit(
@@ -96,7 +93,6 @@ interface IStakingManager {
     error InvalidAmountError(uint256 amount);
     error InvalidRewardTypeError(uint8 incomeType);
     error StakeHolderUnderStakingError(address tokenAddress);
-    error LpUnderStakingPeriodError(address lpAddress, uint256 lpRound);
     error InvalidRewardAmount(address lpAddress, uint256 lpRound);
 
     function liquidityProviderDeposit(uint256 amount) external;
@@ -111,8 +107,6 @@ interface IStakingManager {
         uint8 incomeType
     ) external;
     function createLiquidityProviderRewardBatch(BatchReward[] memory batchRewards) external;
-
-    function liquidityProviderRoundStakingOver(address lpAddress, uint256 lpStakingRound) external;
 
     function liquidityProviderClaimReward(uint256 amount) external;
 
