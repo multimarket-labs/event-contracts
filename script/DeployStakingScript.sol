@@ -67,7 +67,7 @@ contract DeployStakingScript is Script {
     AirdropManager public airdropManagerImplementation;
     AirdropManager public airdropManager;
 
-    AirdropManager public usdt;
+    TestUSDT public usdt;
 
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -245,17 +245,26 @@ contract DeployStakingScript is Script {
         vm.writeJson(finalJSON, "./cache/__deployed_addresses.json");
     }
 
+    // forge script DeployStakingScript --sig "update()"  --slow --multi --rpc-url https://bsc-dataseed.binance.org --broadcast
+    function update() public {
+        initContracts();
+
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+
+        nodeManagerImplementation = new NodeManager();
+        nodeManagerProxyAdmin.upgradeAndCall(
+            ITransparentUpgradeableProxy(address(nodeManager)), address(nodeManagerImplementation), ""
+        );
+
+        vm.stopBroadcast();
+    }
+
     // forge script DeployStakingScript --sig "initChooseMeToken()"  --slow --multi --rpc-url https://bsc-dataseed.binance.org --broadcast
     function initChooseMeToken() public {
-        string memory json = vm.readFile("./cache/__deployed_addresses.json");
-        address proxyChooseMeToken = vm.parseJsonAddress(json, ".proxyChooseMeToken");
-        address proxyDaoRewardManager = vm.parseJsonAddress(json, ".proxyDaoRewardManager");
-        address proxyMarketManager = vm.parseJsonAddress(json, ".proxyMarketManager");
-        address proxyAirdropManager = vm.parseJsonAddress(json, ".proxyAirdropManager");
-        address proxySubTokenFundingManager = vm.parseJsonAddress(json, ".proxySubTokenFundingManager");
+        initContracts();
 
-        ChooseMeToken _chooseMeToken = ChooseMeToken(proxyChooseMeToken);
-        if (_chooseMeToken.balanceOf(address(proxyDaoRewardManager)) > 0) return;
+        if (chooseMeToken.balanceOf(address(daoRewardManager)) > 0) return;
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
 
         vm.startBroadcast(deployerPrivateKey);
@@ -263,10 +272,10 @@ contract DeployStakingScript is Script {
             nodePool: vm.rememberKey(deployerPrivateKey),
             techRewardsPool: vm.rememberKey(deployerPrivateKey),
             foundingStrategyPool: vm.rememberKey(deployerPrivateKey),
-            daoRewardPool: proxyDaoRewardManager,
-            airdropPool: proxyAirdropManager,
-            marketingPool: proxyMarketManager,
-            subTokenPool: proxySubTokenFundingManager
+            daoRewardPool: address(daoRewardManager),
+            airdropPool: address(airdropManager),
+            marketingPool: address(marketManager),
+            subTokenPool: address(subTokenFundingManager)
         });
 
         address[] memory marketingPools = new address[](1);
@@ -275,15 +284,52 @@ contract DeployStakingScript is Script {
         address[] memory ecosystemPools = new address[](1);
         ecosystemPools[0] = vm.rememberKey(deployerPrivateKey);
 
-        _chooseMeToken.setPoolAddress(pools, marketingPools, ecosystemPools);
+        chooseMeToken.setPoolAddress(pools, marketingPools, ecosystemPools);
         console.log("Pool addresses set");
 
         // Execute pool allocation
-        _chooseMeToken.poolAllocate();
+        chooseMeToken.poolAllocate();
         console.log("Pool allocation completed");
-        console.log("Total Supply:", _chooseMeToken.totalSupply() / 1e6, "CMT");
+        console.log("Total Supply:", chooseMeToken.totalSupply() / 1e6, "CMT");
 
         vm.stopBroadcast();
+    }
+
+    function initContracts() internal {
+        string memory json = vm.readFile("./cache/__deployed_addresses.json");
+        address usdtTokenAddress = vm.parseJsonAddress(json, ".usdtTokenAddress");
+        address proxyChooseMeToken = vm.parseJsonAddress(json, ".proxyChooseMeToken");
+        address proxyStakingManager = vm.parseJsonAddress(json, ".proxyStakingManager");
+        address proxyNodeManager = vm.parseJsonAddress(json, ".proxyNodeManager");
+        address proxyDaoRewardManager = vm.parseJsonAddress(json, ".proxyDaoRewardManager");
+        address proxyFomoTreasureManager = vm.parseJsonAddress(json, ".proxyFomoTreasureManager");
+        address proxyEventFundingManager = vm.parseJsonAddress(json, ".proxyEventFundingManager");
+        address proxyMarketManager = vm.parseJsonAddress(json, ".proxyMarketManager");
+        address proxyAirdropManager = vm.parseJsonAddress(json, ".proxyAirdropManager");
+        address proxySubTokenFundingManager = vm.parseJsonAddress(json, ".proxySubTokenFundingManager");
+
+        usdt = TestUSDT(payable(usdtTokenAddress));
+        chooseMeToken = ChooseMeToken(payable(proxyChooseMeToken));
+        daoRewardManager = DaoRewardManager(payable(proxyDaoRewardManager));
+        eventFundingManager = EventFundingManager(payable(proxyEventFundingManager));
+        fomoTreasureManager = FomoTreasureManager(payable(proxyFomoTreasureManager));
+        nodeManager = NodeManager(payable(proxyNodeManager));
+        stakingManager = StakingManager(payable(proxyStakingManager));
+        subTokenFundingManager = SubTokenFundingManager(payable(proxySubTokenFundingManager));
+        marketManager = MarketManager(payable(proxyMarketManager));
+        airdropManager = AirdropManager(payable(proxyAirdropManager));
+
+        chooseMeTokenProxyAdmin = ProxyAdmin(getProxyAdminAddress(proxyChooseMeToken));
+        nodeManagerProxyAdmin = ProxyAdmin(getProxyAdminAddress(proxyNodeManager));
+        stakingManagerProxyAdmin = ProxyAdmin(getProxyAdminAddress(proxyStakingManager));
+        daoRewardManagerProxyAdmin = ProxyAdmin(getProxyAdminAddress(proxyDaoRewardManager));
+        fomoTreasureManagerProxyAdmin = ProxyAdmin(getProxyAdminAddress(proxyFomoTreasureManager));
+        eventFundingManagerProxyAdmin = ProxyAdmin(getProxyAdminAddress(proxyEventFundingManager));
+        subTokenFundingManagerProxyAdmin = ProxyAdmin(getProxyAdminAddress(proxySubTokenFundingManager));
+        marketManagerProxyAdmin = ProxyAdmin(getProxyAdminAddress(proxyMarketManager));
+        airdropManagerProxyAdmin = ProxyAdmin(getProxyAdminAddress(proxyAirdropManager));
+
+        console.log("Contracts initialized");
     }
 
     function getProxyAdminAddress(address proxy) internal view returns (address) {
